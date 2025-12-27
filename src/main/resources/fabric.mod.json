@@ -1,0 +1,37 @@
+{
+	"schemaVersion": 1,
+	"id": "clansreforged",
+	"version": "${version}",
+	"name": "Clans Reforged",
+	"description": "a Mod that adds Clans and Alliance System. Can hook with LuckPerm and GriefDefender",
+	"authors": [
+		"xShirae"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/clansreforged/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"net.hosenka.ClansReforged"
+		],
+		"fabric-datagen": [
+			"net.hosenka.ClansReforgedDataGenerator"
+		],
+        "client": [
+            "net.hosenka.ClansReforgedClient"
+        ]
+	},
+	"mixins": [
+		"clansreforged.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.18.4",
+		"minecraft": "~1.21.1",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
