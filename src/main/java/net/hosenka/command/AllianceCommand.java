@@ -186,7 +186,80 @@ public class AllianceCommand {
                                         context.getSource().sendFeedback(() -> Text.literal(sb.toString().trim()), false);
                                         return 1;
                                     }))
+
+
                     )
+
+                    .then(CommandManager.literal("list")
+                            .executes(context -> {
+                                var allAlliances = AllianceRegistry.getAllAlliances();
+
+                                if (allAlliances.isEmpty()) {
+                                    context.getSource().sendFeedback(
+                                            () -> Text.literal("No alliances have been created yet."),
+                                            false
+                                    );
+                                    return 1;
+                                }
+
+                                StringBuilder sb = new StringBuilder("Existing alliances:\n");
+
+                                for (Alliance alliance : allAlliances.values()) {
+                                    sb.append("- ").append(alliance.getName())
+                                            .append(" (").append(alliance.getClans().size()).append(" clans)")
+                                            .append("\n");
+                                }
+
+                                context.getSource().sendFeedback(
+                                        () -> Text.literal(sb.toString().trim()),
+                                        false
+                                );
+                                return 1;
+                            })
+                    )
+
+                    .then(CommandManager.literal("rename")
+                            .then(CommandManager.argument("old", StringArgumentType.string())
+                                    .then(CommandManager.argument("new", StringArgumentType.string())
+                                            .executes(context -> {
+                                                if (!context.getSource().hasPermissionLevel(2)) {
+                                                    context.getSource().sendError(Text.literal("You do not have permission to rename alliances."));
+                                                    return 0;
+                                                }
+
+                                                String oldName = StringArgumentType.getString(context, "old");
+                                                String newName = StringArgumentType.getString(context, "new");
+
+                                                Alliance target = null;
+
+                                                for (Alliance alliance : AllianceRegistry.getAllAlliances().values()) {
+                                                    if (alliance.getName().equalsIgnoreCase(oldName)) {
+                                                        target = alliance;
+                                                        break;
+                                                    }
+                                                }
+
+                                                if (target == null) {
+                                                    context.getSource().sendError(Text.literal("Alliance '" + oldName + "' not found."));
+                                                    return 0;
+                                                }
+
+                                                // Check name collision
+                                                for (Alliance alliance : AllianceRegistry.getAllAlliances().values()) {
+                                                    if (alliance.getName().equalsIgnoreCase(newName)) {
+                                                        context.getSource().sendError(Text.literal("Another alliance with that name already exists."));
+                                                        return 0;
+                                                    }
+                                                }
+
+                                                target.setName(newName);
+
+                                                context.getSource().sendFeedback(() ->
+                                                        Text.literal("Alliance '" + oldName + "' has been renamed to '" + newName + "'."), false);
+                                                return 1;
+                                            }))))
+
+
             );
         });
     }

@@ -210,6 +210,50 @@ public class ClanCommand {
                                     })
                             )
                     )
+
+                    .then(CommandManager.literal("rename")
+                            .then(CommandManager.argument("old", StringArgumentType.string())
+                                    .then(CommandManager.argument("new", StringArgumentType.string())
+                                            .executes(context -> {
+                                                String oldName = StringArgumentType.getString(context, "old");
+                                                String newName = StringArgumentType.getString(context, "new");
+                                                UUID playerId = context.getSource().getPlayer().getUuid();
+
+                                                Clan targetClan = null;
+                                                for (Clan clan : ClanRegistry.getAllClans().values()) {
+                                                    if (clan.getName().equalsIgnoreCase(oldName)) {
+                                                        targetClan = clan;
+                                                        break;
+                                                    }
+                                                }
+
+                                                if (targetClan == null) {
+                                                    context.getSource().sendError(Text.literal("Clan '" + oldName + "' not found."));
+                                                    return 0;
+                                                }
+
+                                                // Leader check
+                                                if (!targetClan.isLeader(playerId) && !context.getSource().hasPermissionLevel(2)) {
+                                                    context.getSource().sendError(Text.literal("Only the clan leader or an admin can rename the clan."));
+                                                    return 0;
+                                                }
+
+                                                // Check if new name already exists
+                                                for (Clan clan : ClanRegistry.getAllClans().values()) {
+                                                    if (clan.getName().equalsIgnoreCase(newName)) {
+                                                        context.getSource().sendError(Text.literal("Another clan with that name already exists."));
+                                                        return 0;
+                                                    }
+                                                }
+
+                                                targetClan.setName(newName);
+
+                                                context.getSource().sendFeedback(() ->
+                                                        Text.literal("Clan '" + oldName + "' has been renamed to '" + newName + "'."), false);
+
+                                                return 1;
+                                            }))))
+
             );
         });
     }

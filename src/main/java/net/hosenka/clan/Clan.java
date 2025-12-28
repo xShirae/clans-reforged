@@ -7,7 +7,7 @@ import java.util.UUID;
 
 public class Clan {
     private final UUID id;
-    private final String name;
+    private String name;
     private final Set<UUID> members = new HashSet<>();
     private UUID allianceId = null;
     private UUID leaderId = null;
@@ -34,6 +34,12 @@ public class Clan {
     public UUID getLeaderId() { return leaderId; }
 
     public void setLeaderId(UUID leaderId) { this.leaderId = leaderId; }
+
+    public void setName(String newName) {
+        // Optional: sanitize input
+        this.name = newName;
+    }
+
 
     public boolean isLeader(UUID playerUUID) {
         return leaderId != null && leaderId.equals(playerUUID);

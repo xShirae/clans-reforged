@@ -6,7 +6,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public class Alliance {
-    private final String name;
+    private String name;
     private final Set<UUID> clans = new HashSet<>();
 
     public Alliance(String name) {
@@ -28,4 +28,9 @@ public class Alliance {
     public void removeClan(UUID clanId) {
         clans.remove(clanId);
     }
+
+    public void setName(String newName) {
+        this.name = newName;
+    }
+
 }
