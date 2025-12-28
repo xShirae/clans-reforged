@@ -32,6 +32,9 @@ dependencies {
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    // H2 Database
+    implementation 'com.h2database:h2:2.2.224' // latest as of late 2025
 	
 }
 

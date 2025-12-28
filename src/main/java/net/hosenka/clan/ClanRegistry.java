@@ -1,9 +1,12 @@
 // clan/ClanRegistry.java
 package net.hosenka.clan;
 
+import java.sql.SQLException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import net.hosenka.database.ClanDAO;
 
 public class ClanRegistry {
     private static final Map<UUID, Clan> clans = new HashMap<>();
@@ -24,5 +27,22 @@ public class ClanRegistry {
 
     public static Map<UUID, Clan> getAllClans() {
         return clans;
+    }
+
+    public static void loadFromDatabase() {
+        try {
+            List<Clan> loadedClans = ClanDAO.loadAllClans();
+            clans.clear();
+
+            for (Clan clan : loadedClans) {
+                clans.put(clan.getId(), clan);
+            }
+
+            System.out.println("[ClansReforged] Loaded " + clans.size() + " clans from database.");
+
+        } catch (SQLException e) {
+            System.err.println("[ClansReforged] Failed to load clans:");
+            e.printStackTrace();
+        }
     }
 }

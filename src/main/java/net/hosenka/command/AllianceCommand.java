@@ -8,10 +8,11 @@ import net.hosenka.alliance.AllianceRegistry;
 import net.hosenka.clan.Clan;
 import net.hosenka.clan.ClanMembershipRegistry;
 import net.hosenka.clan.ClanRegistry;
+import net.hosenka.database.AllianceDAO;
 import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
 
+import java.sql.SQLException;
 import java.util.Map;
 import java.util.UUID;
 
@@ -30,7 +31,16 @@ public class AllianceCommand {
                                         }
 
                                         String name = StringArgumentType.getString(context, "name");
-                                        AllianceRegistry.createAlliance(name);
+                                        UUID id = AllianceRegistry.createAlliance(name);
+                                        Alliance alliance = AllianceRegistry.getAlliance(id);
+
+                                        try {
+                                            AllianceDAO.saveAlliance(id, alliance);
+                                        } catch (SQLException e) {
+                                            e.printStackTrace();
+                                            context.getSource().sendError(Text.literal("Failed to save alliance to database."));
+                                            return 0;
+                                        }
 
                                         context.getSource().sendFeedback(() -> Text.literal("Alliance created: " + name), false);
                                         return 1;
@@ -60,13 +70,18 @@ public class AllianceCommand {
                                             return 0;
                                         }
 
-                                        // Remove alliance from any clans
                                         Alliance deleted = AllianceRegistry.getAlliance(toDelete);
                                         for (UUID clanId : deleted.getClans()) {
                                             Clan clan = ClanRegistry.getClan(clanId);
                                             if (clan != null) {
                                                 clan.setAllianceId(null);
                                             }
+                                        }
+
+                                        try {
+                                            AllianceDAO.deleteAlliance(toDelete);
+                                        } catch (SQLException e) {
+                                            e.printStackTrace();
                                         }
 
                                         AllianceRegistry.deleteAlliance(toDelete);
@@ -86,7 +101,6 @@ public class AllianceCommand {
                                         }
 
                                         String name = StringArgumentType.getString(context, "name");
-
                                         UUID clanId = ClanMembershipRegistry.getClan(playerId);
                                         Clan clan = ClanRegistry.getClan(clanId);
 
@@ -119,6 +133,12 @@ public class AllianceCommand {
                                         target.addClan(clanId);
                                         clan.setAllianceId(allianceId);
 
+                                        try {
+                                            AllianceDAO.saveAlliance(allianceId, target);
+                                        } catch (SQLException e) {
+                                            e.printStackTrace();
+                                        }
+
                                         context.getSource().sendFeedback(() -> Text.literal("Your clan has joined the alliance: " + name), false);
                                         return 1;
                                     })))
@@ -143,6 +163,11 @@ public class AllianceCommand {
                                 Alliance alliance = AllianceRegistry.getAlliance(clan.getAllianceId());
                                 if (alliance != null) {
                                     alliance.removeClan(clanId);
+                                    try {
+                                        AllianceDAO.saveAlliance(clan.getAllianceId(), alliance);
+                                    } catch (SQLException e) {
+                                        e.printStackTrace();
+                                    }
                                 }
 
                                 clan.setAllianceId(null);
@@ -186,10 +211,9 @@ public class AllianceCommand {
                                         context.getSource().sendFeedback(() -> Text.literal(sb.toString().trim()), false);
                                         return 1;
                                     }))
-
-
                     )
 
+                    // /alliance list
                     .then(CommandManager.literal("list")
                             .executes(context -> {
                                 var allAlliances = AllianceRegistry.getAllAlliances();
@@ -203,11 +227,9 @@ public class AllianceCommand {
                                 }
 
                                 StringBuilder sb = new StringBuilder("Existing alliances:\n");
-
                                 for (Alliance alliance : allAlliances.values()) {
                                     sb.append("- ").append(alliance.getName())
-                                            .append(" (").append(alliance.getClans().size()).append(" clans)")
-                                            .append("\n");
+                                            .append(" (").append(alliance.getClans().size()).append(" clans)\n");
                                 }
 
                                 context.getSource().sendFeedback(
@@ -218,6 +240,7 @@ public class AllianceCommand {
                             })
                     )
 
+                    // /alliance rename <old> <new>
                     .then(CommandManager.literal("rename")
                             .then(CommandManager.argument("old", StringArgumentType.string())
                                     .then(CommandManager.argument("new", StringArgumentType.string())
@@ -230,16 +253,18 @@ public class AllianceCommand {
                                                 String oldName = StringArgumentType.getString(context, "old");
                                                 String newName = StringArgumentType.getString(context, "new");
 
+                                                UUID idToRename = null;
                                                 Alliance target = null;
 
-                                                for (Alliance alliance : AllianceRegistry.getAllAlliances().values()) {
-                                                    if (alliance.getName().equalsIgnoreCase(oldName)) {
-                                                        target = alliance;
+                                                for (Map.Entry<UUID, Alliance> entry : AllianceRegistry.getAllAlliances().entrySet()) {
+                                                    if (entry.getValue().getName().equalsIgnoreCase(oldName)) {
+                                                        idToRename = entry.getKey();
+                                                        target = entry.getValue();
                                                         break;
                                                     }
                                                 }
 
-                                                if (target == null) {
+                                                if (target == null || idToRename == null) {
                                                     context.getSource().sendError(Text.literal("Alliance '" + oldName + "' not found."));
                                                     return 0;
                                                 }
@@ -254,12 +279,16 @@ public class AllianceCommand {
 
                                                 target.setName(newName);
 
+                                                try {
+                                                    AllianceDAO.saveAlliance(idToRename, target);
+                                                } catch (SQLException e) {
+                                                    e.printStackTrace();
+                                                }
+
                                                 context.getSource().sendFeedback(() ->
                                                         Text.literal("Alliance '" + oldName + "' has been renamed to '" + newName + "'."), false);
                                                 return 1;
                                             }))))
-
-
             );
         });
     }
