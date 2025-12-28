@@ -7,17 +7,25 @@ import java.util.UUID;
 
 public class Alliance {
     private final String name;
-    private final Set<UUID> guilds = new HashSet<>();
+    private final Set<UUID> clans = new HashSet<>();
 
     public Alliance(String name) {
         this.name = name;
     }
 
-    public String getName() { return name; }
+    public String getName() {
+        return name;
+    }
 
-    public void addGuild(UUID guildId) { guilds.add(guildId); }
+    public Set<UUID> getClans() {
+        return clans;
+    }
 
-    public void removeGuild(UUID guildId) { guilds.remove(guildId); }
+    public void addClan(UUID clanId) {
+        clans.add(clanId);
+    }
 
-    public Set<UUID> getGuilds() { return guilds; }
+    public void removeClan(UUID clanId) {
+        clans.remove(clanId);
+    }
 }

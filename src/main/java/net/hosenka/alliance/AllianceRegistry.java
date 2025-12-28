@@ -21,4 +21,8 @@ public class AllianceRegistry {
     public static Map<UUID, Alliance> getAllAlliances() {
         return alliances;
     }
+
+    public static void deleteAlliance(UUID id) {
+        alliances.remove(id);
+    }
 }

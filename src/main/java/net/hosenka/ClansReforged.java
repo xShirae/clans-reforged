@@ -3,7 +3,7 @@ package net.hosenka;
 import net.fabricmc.api.ModInitializer;
 
 import net.hosenka.command.AllianceCommand;
-import net.hosenka.command.GuildCommand;
+import net.hosenka.command.ClanCommand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,7 +14,7 @@ public class ClansReforged implements ModInitializer {
 	@Override
 	public void onInitialize() {
         LOGGER.info("Clans Reforged initialized!");
-        GuildCommand.register();
+        ClanCommand.register();
         AllianceCommand.register();
 	}
 }

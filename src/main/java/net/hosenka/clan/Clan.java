@@ -1,17 +1,18 @@
-// guild/Guild.java
-package net.hosenka.guild;
+// clan/Clan.java
+package net.hosenka.clan;
 
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
-public class Guild {
+public class Clan {
     private final UUID id;
     private final String name;
     private final Set<UUID> members = new HashSet<>();
     private UUID allianceId = null;
+    private UUID leaderId = null;
 
-    public Guild(UUID id, String name) {
+    public Clan(UUID id, String name) {
         this.id = id;
         this.name = name;
     }
@@ -29,4 +30,12 @@ public class Guild {
     public UUID getAllianceId() { return allianceId; }
 
     public void setAllianceId(UUID allianceId) { this.allianceId = allianceId; }
+
+    public UUID getLeaderId() { return leaderId; }
+
+    public void setLeaderId(UUID leaderId) { this.leaderId = leaderId; }
+
+    public boolean isLeader(UUID playerUUID) {
+        return leaderId != null && leaderId.equals(playerUUID);
+    }
 }
