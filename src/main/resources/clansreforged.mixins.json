@@ -3,7 +3,7 @@
 	"package": "net.hosenka.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-		"ExampleMixin"
+      "GameProfileMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

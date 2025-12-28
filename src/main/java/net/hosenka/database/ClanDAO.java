@@ -47,7 +47,9 @@ public class ClanDAO {
 
     public static List<Clan> loadAllClans() throws SQLException {
         List<Clan> clans = new ArrayList<>();
+        Map<UUID, Clan> clanMap = new HashMap<>();
 
+        // Load clans
         try (Statement stmt = DatabaseManager.getConnection().createStatement()) {
             ResultSet rs = stmt.executeQuery("SELECT * FROM clans");
 
@@ -56,15 +58,34 @@ public class ClanDAO {
                 String name = rs.getString("name");
                 UUID leader = UUID.fromString(rs.getString("leader"));
                 String allianceStr = rs.getString("alliance");
-                UUID alliance = (allianceStr != null) ? UUID.fromString(allianceStr) : null;
+                UUID alliance = allianceStr != null ? UUID.fromString(allianceStr) : null;
 
                 Clan clan = new Clan(id, name);
                 clan.setLeaderId(leader);
                 clan.setAllianceId(alliance);
+
                 clans.add(clan);
+                clanMap.put(id, clan);
+            }
+        }
+
+        // Load members
+        try (Statement stmt = DatabaseManager.getConnection().createStatement()) {
+            ResultSet rs = stmt.executeQuery("SELECT player, clan FROM clan_members");
+
+            while (rs.next()) {
+                UUID playerId = UUID.fromString(rs.getString("player"));
+                UUID clanId = UUID.fromString(rs.getString("clan"));
+
+                Clan clan = clanMap.get(clanId);
+                if (clan != null) {
+                    clan.addMember(playerId);
+                }
             }
         }
 
         return clans;
     }
+
+
 }

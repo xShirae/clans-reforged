@@ -9,6 +9,7 @@ import net.hosenka.command.ClanCommand;
 import net.hosenka.database.DatabaseManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 
 public class ClansReforged implements ModInitializer {
 	public static final String MOD_ID = "clansreforged";
@@ -22,6 +23,19 @@ public class ClansReforged implements ModInitializer {
         // Load persisted data
         ClanRegistry.loadFromDatabase();
         AllianceRegistry.loadFromDatabase();
+
+        // Delete empty clan at startup
+        /*ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            int before = ClanRegistry.getAllClans().size();
+            ClanRegistry.cleanupEmptyClans();
+            int after = ClanRegistry.getAllClans().size();
+            int removed = before - after;
+
+            if (removed > 0) {
+                ClansReforged.LOGGER.info("Cleaned up " + removed + " empty clan(s) on startup.");
+            }
+        });;*/
+
 
         // Register commands
         ClanCommand.register();

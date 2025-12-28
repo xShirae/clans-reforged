@@ -116,6 +116,7 @@ public class ClanCommand {
                                 }
 
                                 ClanMembershipRegistry.leaveClan(playerId);
+                                ClanRegistry.cleanupEmptyClans();
 
                                 context.getSource().sendFeedback(
                                         () -> Text.literal("You have left your clan."),
@@ -157,25 +158,52 @@ public class ClanCommand {
                                     .executes(context -> {
                                         String name = StringArgumentType.getString(context, "name");
                                         UUID clanIdToDelete = null;
+                                        Clan clanToDelete = null;
 
                                         for (Map.Entry<UUID, Clan> entry : ClanRegistry.getAllClans().entrySet()) {
                                             if (entry.getValue().getName().equalsIgnoreCase(name)) {
                                                 clanIdToDelete = entry.getKey();
+                                                clanToDelete = entry.getValue();
                                                 break;
                                             }
                                         }
 
-                                        if (clanIdToDelete == null) {
+                                        if (clanToDelete == null) {
                                             context.getSource().sendError(Text.literal("Clan '" + name + "' not found."));
                                             return 0;
                                         }
 
+                                        //  Remove from alliance FIRST
+                                        UUID allianceId = clanToDelete.getAllianceId();
+                                        if (allianceId != null) {
+                                            Alliance alliance = AllianceRegistry.getAlliance(allianceId);
+                                            if (alliance != null) {
+                                                alliance.removeClan(clanIdToDelete);
+                                                try {
+                                                    net.hosenka.database.AllianceDAO.saveAlliance(allianceId, alliance);
+                                                } catch (SQLException e) {
+                                                    e.printStackTrace();
+                                                    context.getSource().sendError(Text.literal("Failed to update alliance."));
+                                                    return 0;
+                                                }
+                                            }
+                                        }
+
+                                        // Remove members
+                                        for (UUID memberId : clanToDelete.getMembers()) {
+                                            ClanMembershipRegistry.leaveClan(memberId);
+                                        }
+
+                                        // Delete from DB
                                         try {
                                             ClanDAO.deleteClan(clanIdToDelete);
                                         } catch (SQLException e) {
                                             e.printStackTrace();
+                                            context.getSource().sendError(Text.literal("Failed to delete clan from database."));
+                                            return 0;
                                         }
 
+                                        // Remove from registry
                                         ClanRegistry.getAllClans().remove(clanIdToDelete);
 
                                         context.getSource().sendFeedback(
@@ -186,6 +214,7 @@ public class ClanCommand {
                                     })
                             )
                     )
+
 
                     /* ===================== INFO ===================== */
                     .then(CommandManager.literal("info")
@@ -237,6 +266,173 @@ public class ClanCommand {
                                     })
                             )
                     )
+                    /* ===================== DISBAND ===================== */
+                    .then(CommandManager.literal("disband")
+                            .executes(context -> {
+                                UUID playerId = context.getSource().getPlayer().getUuid();
+                                UUID clanId = ClanMembershipRegistry.getClan(playerId);
+
+                                if (clanId == null) {
+                                    context.getSource().sendError(Text.literal("You are not in a clan."));
+                                    return 0;
+                                }
+
+                                Clan clan = ClanRegistry.getClan(clanId);
+
+                                if (clan == null || !clan.isLeader(playerId)) {
+                                    context.getSource().sendError(Text.literal("Only the clan leader can disband the clan."));
+                                    return 0;
+                                }
+
+                                // Remove from alliance
+                                UUID allianceId = clan.getAllianceId();
+                                if (allianceId != null) {
+                                    Alliance alliance = AllianceRegistry.getAlliance(allianceId);
+                                    if (alliance != null) {
+                                        alliance.removeClan(clanId);
+                                        try {
+                                            net.hosenka.database.AllianceDAO.saveAlliance(allianceId, alliance);
+                                        } catch (SQLException e) {
+                                            e.printStackTrace();
+                                            context.getSource().sendError(Text.literal("Failed to update alliance."));
+                                            return 0;
+                                        }
+                                    }
+                                }
+
+                                // Remove all members
+                                for (UUID memberId : clan.getMembers()) {
+                                    ClanMembershipRegistry.leaveClan(memberId);
+                                }
+
+                                // Delete from DB
+                                try {
+                                    ClanDAO.deleteClan(clanId);
+                                } catch (SQLException e) {
+                                    e.printStackTrace();
+                                    context.getSource().sendError(Text.literal("Failed to delete clan from database."));
+                                    return 0;
+                                }
+
+                                // Remove from memory
+                                ClanRegistry.getAllClans().remove(clanId);
+
+                                context.getSource().sendFeedback(() ->
+                                        Text.literal("Your clan '" + clan.getName() + "' has been disbanded."), false);
+
+                                return 1;
+                            })
+                    )
+
+                    /* ===================== INVITE ===================== */
+                    .then(CommandManager.literal("invite")
+                            .then(CommandManager.argument("player", StringArgumentType.word())
+                                    .executes(context -> {
+                                        UUID inviterId = context.getSource().getPlayer().getUuid();
+                                        UUID clanId = ClanMembershipRegistry.getClan(inviterId);
+
+                                        if (clanId == null) {
+                                            context.getSource().sendError(Text.literal("You are not in a clan."));
+                                            return 0;
+                                        }
+
+                                        Clan clan = ClanRegistry.getClan(clanId);
+                                        if (clan == null || !clan.isLeader(inviterId)) {
+                                            context.getSource().sendError(Text.literal("Only the clan leader can invite players."));
+                                            return 0;
+                                        }
+
+                                        String targetName = StringArgumentType.getString(context, "player");
+                                        var targetProfile = context.getSource().getServer().getUserCache()
+                                                .findByName(targetName).orElse(null);
+
+                                        if (targetProfile == null) {
+                                            context.getSource().sendError(Text.literal("Player not found: " + targetName));
+                                            return 0;
+                                        }
+
+                                        UUID targetId = targetProfile.getId();
+
+                                        if (ClanMembershipRegistry.isInClan(targetId)) {
+                                            context.getSource().sendError(Text.literal("That player is already in a clan."));
+                                            return 0;
+                                        }
+
+                                        ClanRegistry.invitePlayer(targetId, clanId);
+                                        context.getSource().sendFeedback(() ->
+                                                Text.literal("Invited " + targetName + " to the clan."), false);
+
+                                        return 1;
+                                    })))
+
+                    /* ===================== JOIN ===================== */
+                    .then(CommandManager.literal("join")
+                            .executes(context -> {
+                                UUID playerId = context.getSource().getPlayer().getUuid();
+
+                                if (ClanMembershipRegistry.isInClan(playerId)) {
+                                    context.getSource().sendError(Text.literal("You're already in a clan."));
+                                    return 0;
+                                }
+
+                                UUID invitedClanId = ClanRegistry.getPendingInvite(playerId);
+                                if (invitedClanId == null) {
+                                    context.getSource().sendError(Text.literal("You don't have any pending clan invites."));
+                                    return 0;
+                                }
+
+                                Clan clan = ClanRegistry.getClan(invitedClanId);
+                                if (clan == null) {
+                                    context.getSource().sendError(Text.literal("The clan you were invited to no longer exists."));
+                                    return 0;
+                                }
+
+                                clan.addMember(playerId);
+                                ClanMembershipRegistry.joinClan(playerId, invitedClanId);
+                                ClanRegistry.clearInvite(playerId);
+
+                                try {
+                                    ClanDAO.saveMembers(invitedClanId, clan.getMembers());
+                                } catch (SQLException e) {
+                                    e.printStackTrace();
+                                }
+
+                                context.getSource().sendFeedback(() ->
+                                        Text.literal("You have joined the clan: " + clan.getName()), false);
+
+                                return 1;
+                            }))
+
+                    /* ===================== STATUS ===================== */
+                    .then(CommandManager.literal("status")
+                            .executes(context -> {
+                                UUID playerId = context.getSource().getPlayer().getUuid();
+
+                                UUID clanId = ClanMembershipRegistry.getClan(playerId);
+                                Clan clan = clanId != null ? ClanRegistry.getClan(clanId) : null;
+
+                                String clanName = clan != null ? clan.getName() : "None";
+
+                                String allianceName = "None";
+                                if (clan != null && clan.getAllianceId() != null) {
+                                    Alliance alliance = AllianceRegistry.getAlliance(clan.getAllianceId());
+                                    if (alliance != null) {
+                                        allianceName = alliance.getName();
+                                    }
+                                }
+
+                                StringBuilder sb = new StringBuilder();
+                                sb.append("§6Your Clan Status:\n");
+                                sb.append("§7Clan: ").append(clanName).append("\n");
+                                sb.append("§7Alliance: ").append(allianceName);
+
+                                context.getSource().sendFeedback(() -> Text.literal(sb.toString()), false);
+                                return 1;
+                            }))
+
+
+
+
 
                     /* ===================== RENAME ===================== */
                     .then(CommandManager.literal("rename")

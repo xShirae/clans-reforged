@@ -5,6 +5,9 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+
+import net.hosenka.clan.Clan;
+import net.hosenka.clan.ClanRegistry;
 import net.hosenka.database.AllianceDAO;
 
 public class AllianceRegistry {
@@ -34,6 +37,21 @@ public class AllianceRegistry {
             alliances.clear();
             alliances.putAll(loaded);
 
+            // Hook up alliance IDs in clans
+            for (Map.Entry<UUID, Alliance> entry : loaded.entrySet()) {
+                UUID allianceId = entry.getKey();
+                Alliance alliance = entry.getValue();
+
+                for (UUID clanId : alliance.getClans()) {
+                    Clan clan = ClanRegistry.getClan(clanId);
+                    if (clan != null) {
+                        clan.setAllianceId(allianceId);
+                    } else {
+                        System.err.println("[ClansReforged] Warning: Clan not found for alliance: " + clanId);
+                    }
+                }
+            }
+
             System.out.println("[ClansReforged] Loaded " + alliances.size() + " alliances from database.");
 
         } catch (SQLException e) {
@@ -41,4 +59,23 @@ public class AllianceRegistry {
             e.printStackTrace();
         }
     }
+
+    public static void removeClanFromAlliances(UUID clanId) {
+        for (Map.Entry<UUID, Alliance> entry : alliances.entrySet()) {
+            UUID allianceId = entry.getKey();
+            Alliance alliance = entry.getValue();
+
+            if (alliance.getClans().remove(clanId)) {
+                try {
+                    AllianceDAO.saveAlliance(allianceId, alliance);
+                    System.out.println("[ClansReforged] Removed clan " + clanId + " from alliance: " + alliance.getName());
+                } catch (SQLException e) {
+                    System.err.println("[ClansReforged] Failed to update alliance after removing clan:");
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+
 }
