@@ -9,11 +9,12 @@ import java.util.UUID;
 import net.hosenka.clan.Clan;
 import net.hosenka.clan.ClanRegistry;
 import net.hosenka.database.AllianceDAO;
+import org.jetbrains.annotations.NotNull;
 
 public class AllianceRegistry {
     private static final Map<UUID, Alliance> alliances = new HashMap<>();
 
-    public static UUID createAlliance(String name) {
+    public static @NotNull UUID createAlliance(String name) {
         UUID id = UUID.randomUUID();
         alliances.put(id, new Alliance(name));
         return id;

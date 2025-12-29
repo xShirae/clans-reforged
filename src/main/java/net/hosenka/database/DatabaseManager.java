@@ -1,20 +1,27 @@
 // database/DatabaseManager.java
 package net.hosenka.database;
 
+import net.fabricmc.loader.api.FabricLoader;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 
 public class DatabaseManager {
+
     private static Connection connection;
 
     public static void initialize() {
         try {
-            // Creates file-based DB at ./clansreforged.mv.db
-            connection = DriverManager.getConnection("jdbc:h2:file:./clansreforged;AUTO_SERVER=TRUE");
+            boolean isServer = FabricLoader.getInstance().getEnvironmentType().name().equals("SERVER");
 
-            // Initialize schema
+            // Use a different DB file depending on side
+            String dbName = isServer ? "clansreforged_server" : "clansreforged_client";
+            String dbUrl = "jdbc:h2:file:./" + dbName + ";AUTO_SERVER=TRUE";
+
+            connection = DriverManager.getConnection(dbUrl);
+
             try (Statement stmt = connection.createStatement()) {
                 stmt.execute("""
                     CREATE TABLE IF NOT EXISTS clans (
@@ -48,7 +55,7 @@ public class DatabaseManager {
                     );
                 """);
 
-                System.out.println("[ClansReforged] H2 database initialized successfully.");
+                System.out.println("[ClansReforged] H2 database initialized (" + dbName + ")");
             }
 
         } catch (SQLException e) {

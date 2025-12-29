@@ -9,13 +9,14 @@ import java.util.UUID;
 
 import net.hosenka.alliance.AllianceRegistry;
 import net.hosenka.database.ClanDAO;
+import org.jetbrains.annotations.NotNull;
 
 public class ClanRegistry {
     private static final Map<UUID, Clan> clans = new HashMap<>();
     private static final Map<UUID, UUID> pendingInvites = new HashMap<>();
 
 
-    public static UUID createClan(String name, UUID leaderId) {
+    public static @NotNull UUID createClan(String name, UUID leaderId) {
         UUID id = UUID.randomUUID();
         Clan clan = new Clan(id, name);
         clan.setLeaderId(leaderId);
