@@ -1,6 +1,7 @@
 // database/DatabaseManager.java
 package net.hosenka.database;
 
+import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.sql.Connection;
@@ -14,7 +15,7 @@ public class DatabaseManager {
 
     public static void initialize() {
         try {
-            boolean isServer = FabricLoader.getInstance().getEnvironmentType().name().equals("SERVER");
+            boolean isServer = FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER;
 
             // Use a different DB file depending on side
             String dbName = isServer ? "clansreforged_server" : "clansreforged_client";
