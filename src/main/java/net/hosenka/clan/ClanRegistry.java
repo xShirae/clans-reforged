@@ -91,6 +91,16 @@ public class ClanRegistry {
         pendingInvites.remove(playerId);
     }
 
+    public static Clan getByName(String name) {
+        for (Clan clan : clans.values()) {
+            if (clan.getName().equalsIgnoreCase(name)) {
+                return clan;
+            }
+        }
+        return null;
+    }
+
+
 
 
 }

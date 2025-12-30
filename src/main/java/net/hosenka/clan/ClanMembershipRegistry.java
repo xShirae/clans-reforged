@@ -1,9 +1,7 @@
 // clan/ClanMembershipRegistry.java
 package net.hosenka.clan;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 public class ClanMembershipRegistry {
     private static final Map<UUID, UUID> playerToClan = new HashMap<>();
@@ -26,5 +24,9 @@ public class ClanMembershipRegistry {
 
     public static Map<UUID, UUID> getAllMemberships() {
         return playerToClan;
+    }
+
+    public static Set<UUID> getAllPlayers() {
+        return new HashSet<>(playerToClan.keySet());
     }
 }

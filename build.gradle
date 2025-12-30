@@ -21,6 +21,17 @@ repositories {
 		url = 'https://repo.glaremasters.me/repository/bloodshot'
 	}
 
+	maven {
+		name = "Kyori"
+		url = "https://repo.spongepowered.org/maven"
+	}
+	maven {
+		name = "sonatype"
+		url = "https://oss.sonatype.org/content/repositories/snapshots/"
+	}
+
+	mavenCentral()
+
 }
 
 fabricApi {
@@ -44,6 +55,11 @@ dependencies {
 	// Grief Defender
 	compileOnly group: 'com.griefdefender', name: 'api', version: '2.1.1-SNAPSHOT'
 
+	// Adventure Text API (for Component)
+	//compileOnly("net.kyori:adventure-api:4.11.0")
+
+	// Flowpowered Math (for Vector3i)
+	//compileOnly("com.flowpowered:flow-math:1.0.3")
 
 }
 
