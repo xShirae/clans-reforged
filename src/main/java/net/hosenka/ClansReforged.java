@@ -12,6 +12,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 
+import java.lang.reflect.Method;
+import java.net.URL;
+
 
 public class ClansReforged implements ModInitializer {
 	public static final String MOD_ID = "clansreforged";
@@ -20,6 +23,8 @@ public class ClansReforged implements ModInitializer {
     @Override
     public void onInitialize() {
         LOGGER.info("Clans Reforged initialized!");
+
+
         DatabaseManager.initialize();
 
         ClanRegistry.loadFromDatabase();
@@ -29,7 +34,7 @@ public class ClansReforged implements ModInitializer {
         AllianceCommand.register();
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
-            // VERY IMPORTANT: integrated server runs on CLIENT environment
+            //integrated server runs on CLIENT environment
             if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
                 return;
             }
@@ -38,6 +43,25 @@ public class ClansReforged implements ModInitializer {
                 net.hosenka.integration.griefdefender.GDIntegration.init(server);
             } catch (Throwable t) {
                 LOGGER.error("Failed to initialize GD integration", t);
+            }
+
+            try {
+                Class<?> cls = Class.forName(
+                        "com.griefdefender.lib.kyori.adventure.platform.forge.MinecraftComponentSerializer"
+                );
+
+                URL from = cls.getProtectionDomain().getCodeSource() != null
+                        ? cls.getProtectionDomain().getCodeSource().getLocation()
+                        : null;
+
+                Method isSupported = cls.getMethod("isSupported");
+                boolean supported = (boolean) isSupported.invoke(null);
+
+                System.out.println("[ClansReforged] GD MinecraftComponentSerializer supported = " + supported);
+                System.out.println("[ClansReforged] Loaded from = " + from);
+            } catch (Throwable t) {
+                System.out.println("[ClansReforged] GD serializer check failed:");
+                t.printStackTrace();
             }
         });
     }
