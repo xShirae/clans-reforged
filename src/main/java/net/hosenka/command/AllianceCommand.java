@@ -9,8 +9,8 @@ import net.hosenka.clan.Clan;
 import net.hosenka.clan.ClanMembershipRegistry;
 import net.hosenka.clan.ClanRegistry;
 import net.hosenka.database.AllianceDAO;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.text.Text;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
 
 import java.sql.SQLException;
 import java.util.Map;
@@ -19,14 +19,14 @@ import java.util.UUID;
 public class AllianceCommand {
     public static void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            dispatcher.register(CommandManager.literal("alliance")
+            dispatcher.register(Commands.literal("alliance")
 
                     // /alliance create <name>
-                    .then(CommandManager.literal("create")
-                            .then(CommandManager.argument("name", StringArgumentType.string())
+                    .then(Commands.literal("create")
+                            .then(Commands.argument("name", StringArgumentType.string())
                                     .executes(context -> {
-                                        if (!context.getSource().hasPermissionLevel(2)) {
-                                            context.getSource().sendError(Text.literal("You do not have permission to create alliances."));
+                                        if (!context.getSource().hasPermission(2)) {
+                                            context.getSource().sendFailure(Component.literal("You do not have permission to create alliances."));
                                             return 0;
                                         }
 
@@ -38,20 +38,20 @@ public class AllianceCommand {
                                             AllianceDAO.saveAlliance(id, alliance);
                                         } catch (SQLException e) {
                                             e.printStackTrace();
-                                            context.getSource().sendError(Text.literal("Failed to save alliance to database."));
+                                            context.getSource().sendFailure(Component.literal("Failed to save alliance to database."));
                                             return 0;
                                         }
 
-                                        context.getSource().sendFeedback(() -> Text.literal("Alliance created: " + name), false);
+                                        context.getSource().sendSuccess(() ->  Component.literal("Alliance created: " + name), false);
                                         return 1;
                                     })))
 
                     // /alliance delete <name>
-                    .then(CommandManager.literal("delete")
-                            .then(CommandManager.argument("name", StringArgumentType.string())
+                    .then(Commands.literal("delete")
+                            .then(Commands.argument("name", StringArgumentType.string())
                                     .executes(context -> {
-                                        if (!context.getSource().hasPermissionLevel(2)) {
-                                            context.getSource().sendError(Text.literal("You do not have permission to delete alliances."));
+                                        if (!context.getSource().hasPermission(2)) {
+                                            context.getSource().sendFailure(Component.literal("You do not have permission to delete alliances."));
                                             return 0;
                                         }
 
@@ -66,7 +66,7 @@ public class AllianceCommand {
                                         }
 
                                         if (toDelete == null) {
-                                            context.getSource().sendError(Text.literal("Alliance '" + name + "' not found."));
+                                            context.getSource().sendFailure(Component.literal("Alliance '" + name + "' not found."));
                                             return 0;
                                         }
 
@@ -86,17 +86,17 @@ public class AllianceCommand {
 
                                         AllianceRegistry.deleteAlliance(toDelete);
 
-                                        context.getSource().sendFeedback(() -> Text.literal("Alliance '" + name + "' has been deleted."), false);
+                                        context.getSource().sendSuccess(() ->  Component.literal("Alliance '" + name + "' has been deleted."), false);
                                         return 1;
                                     })))
 
                     // /alliance join <name>
-                    .then(CommandManager.literal("join")
-                            .then(CommandManager.argument("name", StringArgumentType.string())
+                    .then(Commands.literal("join")
+                            .then(Commands.argument("name", StringArgumentType.string())
                                     .executes(context -> {
-                                        UUID playerId = context.getSource().getPlayer().getUuid();
+                                        UUID playerId = context.getSource().getPlayerOrException().getUUID();
                                         if (!ClanMembershipRegistry.isInClan(playerId)) {
-                                            context.getSource().sendError(Text.literal("You must be in a clan to join an alliance."));
+                                            context.getSource().sendFailure(Component.literal("You must be in a clan to join an alliance."));
                                             return 0;
                                         }
 
@@ -105,12 +105,12 @@ public class AllianceCommand {
                                         Clan clan = ClanRegistry.getClan(clanId);
 
                                         if (clan == null) {
-                                            context.getSource().sendError(Text.literal("Clan not found."));
+                                            context.getSource().sendFailure(Component.literal("Clan not found."));
                                             return 0;
                                         }
 
                                         if (clan.getAllianceId() != null) {
-                                            context.getSource().sendError(Text.literal("Your clan is already in an alliance."));
+                                            context.getSource().sendFailure(Component.literal("Your clan is already in an alliance."));
                                             return 0;
                                         }
 
@@ -126,7 +126,7 @@ public class AllianceCommand {
                                         }
 
                                         if (target == null) {
-                                            context.getSource().sendError(Text.literal("Alliance '" + name + "' not found."));
+                                            context.getSource().sendFailure(Component.literal("Alliance '" + name + "' not found."));
                                             return 0;
                                         }
 
@@ -139,16 +139,16 @@ public class AllianceCommand {
                                             e.printStackTrace();
                                         }
 
-                                        context.getSource().sendFeedback(() -> Text.literal("Your clan has joined the alliance: " + name), false);
+                                        context.getSource().sendSuccess(() ->  Component.literal("Your clan has joined the alliance: " + name), false);
                                         return 1;
                                     })))
 
                     // /alliance leave
-                    .then(CommandManager.literal("leave")
+                    .then(Commands.literal("leave")
                             .executes(context -> {
-                                UUID playerId = context.getSource().getPlayer().getUuid();
+                                UUID playerId = context.getSource().getPlayerOrException().getUUID();
                                 if (!ClanMembershipRegistry.isInClan(playerId)) {
-                                    context.getSource().sendError(Text.literal("You must be in a clan to leave an alliance."));
+                                    context.getSource().sendFailure(Component.literal("You must be in a clan to leave an alliance."));
                                     return 0;
                                 }
 
@@ -156,7 +156,7 @@ public class AllianceCommand {
                                 Clan clan = ClanRegistry.getClan(clanId);
 
                                 if (clan == null || clan.getAllianceId() == null) {
-                                    context.getSource().sendError(Text.literal("Your clan is not in an alliance."));
+                                    context.getSource().sendFailure(Component.literal("Your clan is not in an alliance."));
                                     return 0;
                                 }
 
@@ -172,13 +172,13 @@ public class AllianceCommand {
 
                                 clan.setAllianceId(null);
 
-                                context.getSource().sendFeedback(() -> Text.literal("Your clan has left its alliance."), false);
+                                context.getSource().sendSuccess(() ->  Component.literal("Your clan has left its alliance."), false);
                                 return 1;
                             }))
 
                     // /alliance info <name>
-                    .then(CommandManager.literal("info")
-                            .then(CommandManager.argument("name", StringArgumentType.string())
+                    .then(Commands.literal("info")
+                            .then(Commands.argument("name", StringArgumentType.string())
                                     .executes(context -> {
                                         String name = StringArgumentType.getString(context, "name");
 
@@ -191,7 +191,7 @@ public class AllianceCommand {
                                         }
 
                                         if (alliance == null) {
-                                            context.getSource().sendError(Text.literal("Alliance '" + name + "' not found."));
+                                            context.getSource().sendFailure(Component.literal("Alliance '" + name + "' not found."));
                                             return 0;
                                         }
 
@@ -208,19 +208,19 @@ public class AllianceCommand {
                                             }
                                         }
 
-                                        context.getSource().sendFeedback(() -> Text.literal(sb.toString().trim()), false);
+                                        context.getSource().sendSuccess(() ->  Component.literal(sb.toString().trim()), false);
                                         return 1;
                                     }))
                     )
 
                     // /alliance list
-                    .then(CommandManager.literal("list")
+                    .then(Commands.literal("list")
                             .executes(context -> {
                                 var allAlliances = AllianceRegistry.getAllAlliances();
 
                                 if (allAlliances.isEmpty()) {
-                                    context.getSource().sendFeedback(
-                                            () -> Text.literal("No alliances have been created yet."),
+                                    context.getSource().sendSuccess(
+                                            () ->  Component.literal("No alliances have been created yet."),
                                             false
                                     );
                                     return 1;
@@ -232,8 +232,8 @@ public class AllianceCommand {
                                             .append(" (").append(alliance.getClans().size()).append(" clans)\n");
                                 }
 
-                                context.getSource().sendFeedback(
-                                        () -> Text.literal(sb.toString().trim()),
+                                context.getSource().sendSuccess(
+                                        () ->  Component.literal(sb.toString().trim()),
                                         false
                                 );
                                 return 1;
@@ -241,12 +241,12 @@ public class AllianceCommand {
                     )
 
                     // /alliance rename <old> <new>
-                    .then(CommandManager.literal("rename")
-                            .then(CommandManager.argument("old", StringArgumentType.string())
-                                    .then(CommandManager.argument("new", StringArgumentType.string())
+                    .then(Commands.literal("rename")
+                            .then(Commands.argument("old", StringArgumentType.string())
+                                    .then(Commands.argument("new", StringArgumentType.string())
                                             .executes(context -> {
-                                                if (!context.getSource().hasPermissionLevel(2)) {
-                                                    context.getSource().sendError(Text.literal("You do not have permission to rename alliances."));
+                                                if (!context.getSource().hasPermission(2)) {
+                                                    context.getSource().sendFailure(Component.literal("You do not have permission to rename alliances."));
                                                     return 0;
                                                 }
 
@@ -265,14 +265,14 @@ public class AllianceCommand {
                                                 }
 
                                                 if (target == null || idToRename == null) {
-                                                    context.getSource().sendError(Text.literal("Alliance '" + oldName + "' not found."));
+                                                    context.getSource().sendFailure(Component.literal("Alliance '" + oldName + "' not found."));
                                                     return 0;
                                                 }
 
                                                 // Check name collision
                                                 for (Alliance alliance : AllianceRegistry.getAllAlliances().values()) {
                                                     if (alliance.getName().equalsIgnoreCase(newName)) {
-                                                        context.getSource().sendError(Text.literal("Another alliance with that name already exists."));
+                                                        context.getSource().sendFailure(Component.literal("Another alliance with that name already exists."));
                                                         return 0;
                                                     }
                                                 }
@@ -285,8 +285,8 @@ public class AllianceCommand {
                                                     e.printStackTrace();
                                                 }
 
-                                                context.getSource().sendFeedback(() ->
-                                                        Text.literal("Alliance '" + oldName + "' has been renamed to '" + newName + "'."), false);
+                                                context.getSource().sendSuccess(() ->
+                                                         Component.literal("Alliance '" + oldName + "' has been renamed to '" + newName + "'."), false);
                                                 return 1;
                                             }))))
             );

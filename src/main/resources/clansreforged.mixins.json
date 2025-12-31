@@ -3,7 +3,7 @@
 	"package": "net.hosenka.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-      "gd.GDMinecraftReflectionFindClassMixin"
+
 	],
 	"injectors": {
 		"defaultRequire": 1

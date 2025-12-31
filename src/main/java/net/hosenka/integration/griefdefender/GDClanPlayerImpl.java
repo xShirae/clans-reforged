@@ -6,9 +6,6 @@ import com.griefdefender.api.claim.Claim;
 import com.griefdefender.api.clan.Rank;
 import com.griefdefender.api.data.PlayerData;
 
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-
 import java.util.UUID;
 
 public class GDClanPlayerImpl implements ClanPlayer {
@@ -55,7 +52,7 @@ public class GDClanPlayerImpl implements ClanPlayer {
     public String getFriendlyName() {
         if (ServerHolder.get() != null) {
             var player = ServerHolder.get()
-                    .getPlayerManager()
+                    .getPlayerList()
                     .getPlayer(playerId);
 
             if (player != null) {
@@ -78,7 +75,7 @@ public class GDClanPlayerImpl implements ClanPlayer {
         if (ServerHolder.get() == null) {
             return false;
         }
-        return ServerHolder.get().getPlayerManager().getPlayer(playerId) != null;
+        return ServerHolder.get().getPlayerList().getPlayer(playerId) != null;
     }
 
     @Override
@@ -86,7 +83,7 @@ public class GDClanPlayerImpl implements ClanPlayer {
         if (ServerHolder.get() == null) {
             return null;
         }
-        return ServerHolder.get().getPlayerManager().getPlayer(playerId);
+        return ServerHolder.get().getPlayerList().getPlayer(playerId);
     }
 
     @Override
