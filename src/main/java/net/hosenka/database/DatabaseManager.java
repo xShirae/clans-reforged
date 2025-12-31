@@ -25,13 +25,15 @@ public class DatabaseManager {
 
             try (Statement stmt = connection.createStatement()) {
                 stmt.execute("""
-                    CREATE TABLE IF NOT EXISTS clans (
-                        id UUID PRIMARY KEY,
-                        name VARCHAR(64) UNIQUE NOT NULL,
-                        leader UUID NOT NULL,
-                        alliance UUID
-                    );
-                """);
+                   CREATE TABLE IF NOT EXISTS clans (
+                    id UUID PRIMARY KEY,
+                    tag VARCHAR(6) UNIQUE NOT NULL,
+                    name VARCHAR(64) NOT NULL,
+                    leader UUID NOT NULL,
+                    alliance UUID
+                );
+            """);
+
 
                 stmt.execute("""
                     CREATE TABLE IF NOT EXISTS clan_members (

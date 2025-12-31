@@ -38,13 +38,16 @@ public class GDClanImpl implements Clan {
 
     @Override
     public Component getTagComponent() {
-        return Component.text(source.getName());
+        return Component.text(source.getTag());
     }
+
 
     @Override
     public String getTag() {
-        return source.getName();
+        return source.getTag();
     }
+
+
 
     @Override
     public String getDescription() {
@@ -95,11 +98,20 @@ public class GDClanImpl implements Clan {
 
     @Override
     public List<Rank> getRanks() {
-        return Collections.emptyList();
+        // GD uses ranks in UI and argument parsing.
+        return List.of(CRRank.LEADER, CRRank.MEMBER);
     }
 
     @Override
     public Rank getRank(String rankName) {
+        if (rankName == null) {
+            return null;
+        }
+        for (Rank rank : getRanks()) {
+            if (rank.getName().equalsIgnoreCase(rankName)) {
+                return rank;
+            }
+        }
         return null;
     }
 
@@ -112,4 +124,8 @@ public class GDClanImpl implements Clan {
     public boolean isRival(String tag) {
         return false;
     }
+
+
+
+
 }

@@ -1,4 +1,3 @@
-// database/ClanDAO.java
 package net.hosenka.database;
 
 import net.hosenka.clan.Clan;
@@ -7,16 +6,19 @@ import java.sql.*;
 import java.util.*;
 
 public class ClanDAO {
+
     public static void saveClan(Clan clan) throws SQLException {
         try (PreparedStatement ps = DatabaseManager.getConnection().prepareStatement(
-                "MERGE INTO clans (id, name, leader, alliance) KEY(id) VALUES (?, ?, ?, ?)")) {
+                "MERGE INTO clans (id, tag, name, leader, alliance) KEY(id) VALUES (?, ?, ?, ?, ?)")) {
             ps.setObject(1, clan.getId());
-            ps.setString(2, clan.getName());
-            ps.setObject(3, clan.getLeaderId());
-            ps.setObject(4, clan.getAllianceId());
+            ps.setString(2, clan.getTag());
+            ps.setString(3, clan.getName());
+            ps.setObject(4, clan.getLeaderId());
+            ps.setObject(5, clan.getAllianceId());
             ps.executeUpdate();
         }
     }
+
 
     public static void saveMembers(UUID clanId, Set<UUID> members) throws SQLException {
         Connection conn = DatabaseManager.getConnection();
@@ -44,23 +46,30 @@ public class ClanDAO {
         }
     }
 
-
     public static List<Clan> loadAllClans() throws SQLException {
         List<Clan> clans = new ArrayList<>();
         Map<UUID, Clan> clanMap = new HashMap<>();
 
-        // Load clans
         try (Statement stmt = DatabaseManager.getConnection().createStatement()) {
             ResultSet rs = stmt.executeQuery("SELECT * FROM clans");
 
             while (rs.next()) {
                 UUID id = UUID.fromString(rs.getString("id"));
                 String name = rs.getString("name");
+
+                // New column
+                String tag = rs.getString("tag");
+
                 UUID leader = UUID.fromString(rs.getString("leader"));
                 String allianceStr = rs.getString("alliance");
-                UUID alliance = allianceStr != null ? UUID.fromString(allianceStr) : null;
+                UUID alliance = (allianceStr == null || allianceStr.isBlank()) ? null : UUID.fromString(allianceStr);
 
-                Clan clan = new Clan(id, name);
+                // Back-compat: if loading an old row where tag is null, generate one from name
+                if (tag == null || tag.isBlank()) {
+                    tag = Clan.sanitizeTag(name != null ? name : id.toString());
+                }
+
+                Clan clan = new Clan(id, tag, name != null ? name : tag);
                 clan.setLeaderId(leader);
                 clan.setAllianceId(alliance);
 
@@ -69,10 +78,8 @@ public class ClanDAO {
             }
         }
 
-        // Load members
         try (Statement stmt = DatabaseManager.getConnection().createStatement()) {
             ResultSet rs = stmt.executeQuery("SELECT player, clan FROM clan_members");
-
             while (rs.next()) {
                 UUID playerId = UUID.fromString(rs.getString("player"));
                 UUID clanId = UUID.fromString(rs.getString("clan"));
@@ -88,4 +95,14 @@ public class ClanDAO {
     }
 
 
+    private static UUID uuidOrNull(String value) {
+        if (value == null) return null;
+        String v = value.trim();
+        if (v.isEmpty()) return null;
+        try {
+            return UUID.fromString(v);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
 }

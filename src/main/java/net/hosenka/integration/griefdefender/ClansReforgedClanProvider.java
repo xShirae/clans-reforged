@@ -13,6 +13,31 @@ import java.util.*;
 
 public class ClansReforgedClanProvider implements ClanProvider {
 
+    private net.hosenka.clan.Clan resolveClan(final String tagOrId) {
+        if (tagOrId == null || tagOrId.isBlank()) {
+            return null;
+        }
+
+        // 1) UUID string (GD sometimes passes the UUID id)
+        try {
+            UUID id = UUID.fromString(tagOrId);
+            net.hosenka.clan.Clan byId = ClanRegistry.getClan(id);
+            if (byId != null) {
+                return byId;
+            }
+        } catch (IllegalArgumentException ignored) {
+            // not a UUID
+        }
+
+        net.hosenka.clan.Clan byTag = ClanRegistry.getByTag(tagOrId);
+        if (byTag != null) return byTag;
+
+        return ClanRegistry.getByName(tagOrId);
+
+    }
+
+
+
     @Override
     public List<Clan> getAllClans() {
         List<Clan> result = new ArrayList<>();
@@ -37,39 +62,43 @@ public class ClansReforgedClanProvider implements ClanProvider {
 
     @Override
     public List<ClanPlayer> getClanPlayers(String tag) {
-        var clan = ClanRegistry.getByName(tag);
+        var clan = resolveClan(tag);
         if (clan == null) {
             return Collections.emptyList();
         }
 
         List<ClanPlayer> result = new ArrayList<>();
-        for (UUID memberId : clan.getMembers()) {
-            result.add(new GDClanPlayerImpl(memberId, clan));
+        for (UUID playerId : clan.getMembers()) {
+            result.add(new GDClanPlayerImpl(playerId, clan));
         }
-
         return result;
     }
 
     @Override
     public List<Rank> getClanRanks(String tag) {
-        return Collections.emptyList();
+        // Must match GDClanImpl#getRanks()
+        return List.of(CRRank.LEADER, CRRank.MEMBER);
     }
 
     @Override
-    public com.griefdefender.api.Clan getClan(String tag) {
+    public Clan getClan(String tag) {
         CRDebug.log("ClanProvider.getClan(tag=" + tag + ")");
 
-        var clan = ClanRegistry.getByName(tag);
-
+        var clan = resolveClan(tag);
         if (clan == null) {
-            CRDebug.log(" -> not found (ClanRegistry.getByName returned null). Known clans=" +
-                    ClanRegistry.getAllClans().values().stream().map(c -> c.getName()).toList());
+            CRDebug.log(" -> not found. Known clans=" +
+                    ClanRegistry.getAllClans().values().stream()
+                            .map(c -> c.getTag() + "(" + c.getName() + ")")
+                            .toList()
+            );
+
             return null;
         }
 
-        CRDebug.log(" -> found clan id=" + clan.getId() + " name=" + clan.getName());
+        CRDebug.log(" -> found clan id=" + clan.getId() + " tag=" + clan.getTag() + " name=" + clan.getName());
         return new GDClanImpl(clan);
     }
+
 
     @Override
     public com.griefdefender.api.ClanPlayer getClanPlayer(UUID playerUniqueId) {

@@ -25,6 +25,48 @@ public class ClanCommand {
 
                     /* ===================== CREATE ===================== */
                     .then(Commands.literal("create")
+                            // /clan create <tag> <name>
+                            .then(Commands.argument("tag", StringArgumentType.word())
+                                    .then(Commands.argument("name", StringArgumentType.string())
+                                            .executes(context -> {
+                                                String tagInput = StringArgumentType.getString(context, "tag");
+                                                String name = StringArgumentType.getString(context, "name");
+                                                UUID playerId = context.getSource().getPlayerOrException().getUUID();
+
+                                                String tag;
+                                                try {
+                                                    tag = Clan.sanitizeTag(tagInput);
+                                                } catch (IllegalArgumentException e) {
+                                                    context.getSource().sendFailure(Component.literal(
+                                                            "Invalid tag. Use 1-5 alphanumeric characters (A-Z, 0-9)."
+                                                    ));
+                                                    return 0;
+                                                }
+
+                                                UUID clanId = ClanRegistry.createClanWithTag(tag, name, playerId);
+                                                ClanMembershipRegistry.joinClan(playerId, clanId);
+
+                                                Clan clan = ClanRegistry.getClan(clanId);
+
+                                                try {
+                                                    ClanDAO.saveClan(clan);
+                                                    ClanDAO.saveMembers(clanId, clan.getMembers());
+                                                } catch (SQLException e) {
+                                                    e.printStackTrace();
+                                                    context.getSource().sendFailure(Component.literal("Failed to save clan to database."));
+                                                    return 0;
+                                                }
+
+                                                context.getSource().sendSuccess(
+                                                        () -> Component.literal("Clan created: " + clan.getName() + " (tag: " + clan.getTag() + ")"),
+                                                        false
+                                                );
+                                                return 1;
+                                            })
+                                    )
+                            )
+
+                            // /clan create <name>  (auto-tag from name)
                             .then(Commands.argument("name", StringArgumentType.string())
                                     .executes(context -> {
                                         String name = StringArgumentType.getString(context, "name");
@@ -45,11 +87,14 @@ public class ClanCommand {
                                         }
 
                                         context.getSource().sendSuccess(
-                                                () -> Component.literal("Clan created: " + name),
+                                                () -> Component.literal("Clan created: " + clan.getName() + " (tag: " + clan.getTag() + ")"),
                                                 false
                                         );
                                         return 1;
-                                    })))
+                                    })
+                            )
+                    )
+
 
                     /* ===================== JOIN ===================== */
                     .then(Commands.literal("join")
@@ -63,12 +108,9 @@ public class ClanCommand {
                                             return 0;
                                         }
 
-                                        Clan targetClan = null;
-                                        for (Clan clan : ClanRegistry.getAllClans().values()) {
-                                            if (clan.getName().equalsIgnoreCase(name)) {
-                                                targetClan = clan;
-                                                break;
-                                            }
+                                        Clan targetClan = ClanRegistry.getByTag(name);
+                                        if (targetClan == null) {
+                                            targetClan = ClanRegistry.getByName(name);
                                         }
 
                                         if (targetClan == null) {
@@ -141,7 +183,8 @@ public class ClanCommand {
 
                                 StringBuilder sb = new StringBuilder("Existing clans:\n");
                                 allClans.values().forEach(clan ->
-                                        sb.append("- ").append(clan.getName()).append("\n")
+                                        sb.append("- ").append(clan.getTag()).append(" (").append(clan.getName()).append(")\n")
+
                                 );
 
                                 context.getSource().sendSuccess(
@@ -204,7 +247,8 @@ public class ClanCommand {
                                         }
 
                                         // Remove from registry
-                                        ClanRegistry.getAllClans().remove(clanIdToDelete);
+                                        ClanRegistry.removeClan(clanIdToDelete);
+
 
                                         context.getSource().sendSuccess(
                                                 () -> Component.literal("Clan '" + name + "' has been deleted."),
@@ -222,12 +266,9 @@ public class ClanCommand {
                                     .executes(context -> {
                                         String name = StringArgumentType.getString(context, "name");
 
-                                        Clan targetClan = null;
-                                        for (Clan clan : ClanRegistry.getAllClans().values()) {
-                                            if (clan.getName().equalsIgnoreCase(name)) {
-                                                targetClan = clan;
-                                                break;
-                                            }
+                                        Clan targetClan = ClanRegistry.getByTag(name);
+                                        if (targetClan == null) {
+                                            targetClan = ClanRegistry.getByName(name);
                                         }
 
                                         if (targetClan == null) {
@@ -315,7 +356,7 @@ public class ClanCommand {
                                 }
 
                                 // Remove from memory
-                                ClanRegistry.getAllClans().remove(clanId);
+                                ClanRegistry.removeClan(clanId);
 
                                 context.getSource().sendSuccess(() ->
                                         Component.literal("Your clan '" + clan.getName() + "' has been disbanded."), false);

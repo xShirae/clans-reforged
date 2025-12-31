@@ -30,12 +30,13 @@ public class GDClanPlayerImpl implements ClanPlayer {
 
     @Override
     public void setRank(Rank rank) {
-        // Not implemented
+        // Optional: if your mod supports ranks, persist it.
+        // For now, ignore (GD can still use leader/member).
     }
 
     @Override
     public Rank getRank() {
-        return null;
+        return this.clan.isLeader(playerId) ? CRRank.LEADER : CRRank.MEMBER;
     }
 
     @Override
@@ -67,8 +68,9 @@ public class GDClanPlayerImpl implements ClanPlayer {
 
     @Override
     public String getIdentifier() {
-        return playerId.toString(); // Required by Subject interface
+        return this.playerId.toString();
     }
+
 
     @Override
     public boolean isOnline() {
@@ -88,11 +90,26 @@ public class GDClanPlayerImpl implements ClanPlayer {
 
     @Override
     public PlayerData getPlayerData() {
-        return null; // You can implement GriefDefender.getCore().getPlayerData(...)
+        var core = com.griefdefender.api.GriefDefender.getCore();
+        var user = core.getUser(this.playerId);
+        if (user == null) {
+            // Extremely unlikely, but better than returning null.
+            throw new IllegalStateException("GriefDefender user not available for " + this.playerId);
+        }
+        return user.getPlayerData();
     }
+
 
     @Override
     public Claim getCurrentClaim() {
+        Object online = getOnlinePlayer();
+        if (online instanceof net.minecraft.server.level.ServerPlayer sp) {
+            var core = com.griefdefender.api.GriefDefender.getCore();
+            var world = core.getWorldUniqueId(sp.serverLevel()); // depends on GD API, may differ
+        }
         return null;
     }
+
 }
+
+
