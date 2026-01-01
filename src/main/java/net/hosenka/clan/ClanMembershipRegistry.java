@@ -1,4 +1,3 @@
-// clan/ClanMembershipRegistry.java
 package net.hosenka.clan;
 
 import java.util.*;

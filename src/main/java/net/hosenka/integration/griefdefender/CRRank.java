@@ -2,12 +2,15 @@ package net.hosenka.integration.griefdefender;
 
 import com.griefdefender.api.clan.Rank;
 
-import java.util.Collections;
 import java.util.Set;
 
 public enum CRRank implements Rank {
-    LEADER("leader", "Leader"),
-    MEMBER("member", "Member");
+
+    RESIDENT("resident", "Resident"),
+    ACCESSOR("accessor", "Accessor"),
+    BUILDER("builder", "Builder"),
+    CONTAINER("container", "Container"),
+    MANAGER("manager", "Manager");
 
     private final String name;
     private final String displayName;
@@ -19,6 +22,7 @@ public enum CRRank implements Rank {
 
     @Override
     public String getName() {
+        // match what GD passes in commands/GUI
         return this.name;
     }
 
@@ -29,6 +33,6 @@ public enum CRRank implements Rank {
 
     @Override
     public Set<String> getPermissions() {
-        return Collections.emptySet();
+        return Set.of();
     }
 }

@@ -1,4 +1,3 @@
-// database/DatabaseManager.java
 package net.hosenka.database;
 
 import net.fabricmc.api.EnvType;

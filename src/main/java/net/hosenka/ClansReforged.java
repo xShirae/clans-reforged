@@ -34,36 +34,72 @@ public class ClansReforged implements ModInitializer {
         AllianceCommand.register();
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
-            //integrated server runs on CLIENT environment
+            // Integrated server runs under CLIENT environment - skip server-only integration.
             if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
                 return;
             }
 
-            try {
-                net.hosenka.integration.griefdefender.GDIntegration.init(server);
-            } catch (Throwable t) {
-                LOGGER.error("Failed to initialize GD integration", t);
+            // Helper that tries init + injection
+            final Runnable tryInitAndInject = () -> {
+                try {
+                    net.hosenka.integration.griefdefender.GDIntegration.init(server);
+                } catch (Throwable t) {
+                    LOGGER.error("Failed to initialize GD integration", t);
+                    // don't return; we still might want to retry once
+                }
+
+                final var provider = net.hosenka.integration.griefdefender.GDIntegration.getClanProvider();
+                final boolean registered = net.hosenka.integration.griefdefender.GDIntegration.isRegistered();
+
+                if (registered && provider != null) {
+                    try {
+                        net.hosenka.integration.griefdefender.CRGDClanCommands.register(server, provider);
+                        System.out.println("[ClansReforged] Injected Fabric GD clan commands (/gd clan ...).");
+                    } catch (Throwable t) {
+                        LOGGER.error("Failed to inject Fabric GD clan commands", t);
+                    }
+                } else {
+                    System.out.println("[ClansReforged] GD not ready yet (provider not registered). Will retry once next tick.");
+                }
+            };
+
+            // 1) Try immediately
+            tryInitAndInject.run();
+
+            // 2) If GD wasn't ready, retry once next tick
+            if (!net.hosenka.integration.griefdefender.GDIntegration.isRegistered()
+                    || net.hosenka.integration.griefdefender.GDIntegration.getClanProvider() == null) {
+
+                server.execute(() -> {
+                    // retry once on main server thread
+                    tryInitAndInject.run();
+                });
             }
 
-            try {
-                Class<?> cls = Class.forName(
-                        "com.griefdefender.lib.kyori.adventure.platform.forge.MinecraftComponentSerializer"
-                );
+            // 3) Optional: serializer sanity check (debug only)
+            if (net.hosenka.util.CRDebug.ENABLED) {
+                try {
+                    Class<?> cls = Class.forName(
+                            "com.griefdefender.lib.kyori.adventure.platform.forge.MinecraftComponentSerializer"
+                    );
 
-                URL from = cls.getProtectionDomain().getCodeSource() != null
-                        ? cls.getProtectionDomain().getCodeSource().getLocation()
-                        : null;
+                    URL from = cls.getProtectionDomain().getCodeSource() != null
+                            ? cls.getProtectionDomain().getCodeSource().getLocation()
+                            : null;
 
-                Method isSupported = cls.getMethod("isSupported");
-                boolean supported = (boolean) isSupported.invoke(null);
+                    Method isSupported = cls.getMethod("isSupported");
+                    boolean supported = (boolean) isSupported.invoke(null);
 
-                System.out.println("[ClansReforged] GD MinecraftComponentSerializer supported = " + supported);
-                System.out.println("[ClansReforged] Loaded from = " + from);
-            } catch (Throwable t) {
-                System.out.println("[ClansReforged] GD serializer check failed:");
-                t.printStackTrace();
+                    System.out.println("[ClansReforged][DEBUG] GD MinecraftComponentSerializer supported = " + supported);
+                    System.out.println("[ClansReforged][DEBUG] Loaded from = " + from);
+                } catch (Throwable t) {
+                    System.out.println("[ClansReforged][DEBUG] GD serializer check failed:");
+                    t.printStackTrace();
+                }
             }
         });
+
+
     }
 
 }

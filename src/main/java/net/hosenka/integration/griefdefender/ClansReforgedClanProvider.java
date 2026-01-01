@@ -14,27 +14,23 @@ import java.util.*;
 public class ClansReforgedClanProvider implements ClanProvider {
 
     private net.hosenka.clan.Clan resolveClan(final String tagOrId) {
-        if (tagOrId == null || tagOrId.isBlank()) {
-            return null;
-        }
+        if (tagOrId == null || tagOrId.isBlank()) return null;
 
-        // 1) UUID string (GD sometimes passes the UUID id)
-        try {
-            UUID id = UUID.fromString(tagOrId);
-            net.hosenka.clan.Clan byId = ClanRegistry.getClan(id);
-            if (byId != null) {
-                return byId;
-            }
-        } catch (IllegalArgumentException ignored) {
-            // not a UUID
-        }
-
-        net.hosenka.clan.Clan byTag = ClanRegistry.getByTag(tagOrId);
+        // 1) tag
+        var byTag = ClanRegistry.getByTag(tagOrId);
         if (byTag != null) return byTag;
 
-        return ClanRegistry.getByName(tagOrId);
+        // 2) uuid (backwards / safety)
+        try {
+            UUID id = UUID.fromString(tagOrId);
+            var byId = ClanRegistry.getClan(id);
+            if (byId != null) return byId;
+        } catch (IllegalArgumentException ignored) {}
 
+        // 3) name fallback (GUI says "Enter Clan Name", so keep this)
+        return ClanRegistry.getByName(tagOrId);
     }
+
 
 
 
@@ -76,9 +72,15 @@ public class ClansReforgedClanProvider implements ClanProvider {
 
     @Override
     public List<Rank> getClanRanks(String tag) {
-        // Must match GDClanImpl#getRanks()
-        return List.of(CRRank.LEADER, CRRank.MEMBER);
+        return List.of(
+                CRRank.RESIDENT,
+                CRRank.ACCESSOR,
+                CRRank.BUILDER,
+                CRRank.CONTAINER,
+                CRRank.MANAGER
+        );
     }
+
 
     @Override
     public Clan getClan(String tag) {

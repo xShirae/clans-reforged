@@ -1,4 +1,3 @@
-// database/AllianceDAO.java
 package net.hosenka.database;
 
 import net.hosenka.alliance.Alliance;

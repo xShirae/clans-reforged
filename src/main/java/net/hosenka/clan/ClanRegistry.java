@@ -8,11 +8,6 @@ import org.jetbrains.annotations.Nullable;
 import java.sql.SQLException;
 import java.util.*;
 
-/**
- * GD integration note:
- * - GD stores clan trusts using clan tag strings.
- * - Keep a fast tag->id index so lookups are reliable and cheap.
- */
 public class ClanRegistry {
 
     private static final Map<UUID, Clan> clans = new HashMap<>();
@@ -68,7 +63,6 @@ public class ClanRegistry {
         return clans.get(id);
     }
 
-    /** Unmodifiable view to prevent accidental external mutation. */
     public static Map<UUID, Clan> getAllClans() {
         return Collections.unmodifiableMap(clans);
     }
@@ -211,8 +205,6 @@ public class ClanRegistry {
     }
 
     public static @Nullable String getTagForPlayer(UUID playerId) {
-        if (playerId == null) return null;
-
         UUID clanId = ClanMembershipRegistry.getClan(playerId);
         if (clanId == null) return null;
 
@@ -225,6 +217,7 @@ public class ClanRegistry {
         UUID clanId = ClanMembershipRegistry.getClan(playerId);
         return clanId == null ? null : getClan(clanId);
     }
+
 
 
 

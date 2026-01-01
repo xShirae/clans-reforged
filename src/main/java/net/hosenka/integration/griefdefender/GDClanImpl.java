@@ -6,7 +6,7 @@ import com.griefdefender.api.clan.ClanHome;
 import com.griefdefender.api.clan.Rank;
 import com.griefdefender.lib.flowpowered.math.vector.Vector3i;
 import com.griefdefender.lib.kyori.adventure.text.Component;
-
+import java.util.Locale;
 import java.util.*;
 
 public class GDClanImpl implements Clan {
@@ -21,7 +21,7 @@ public class GDClanImpl implements Clan {
 
     @Override
     public String getId() {
-        return source.getId().toString();
+        return source.getTag().toLowerCase(Locale.ROOT);
     }
 
     @Override
@@ -98,9 +98,15 @@ public class GDClanImpl implements Clan {
 
     @Override
     public List<Rank> getRanks() {
-        // GD uses ranks in UI and argument parsing.
-        return List.of(CRRank.LEADER, CRRank.MEMBER);
+        return List.of(
+                CRRank.RESIDENT,
+                CRRank.ACCESSOR,
+                CRRank.BUILDER,
+                CRRank.CONTAINER,
+                CRRank.MANAGER
+        );
     }
+
 
     @Override
     public Rank getRank(String rankName) {

@@ -23,20 +23,25 @@ public class ClanDAO {
     public static void saveMembers(UUID clanId, Set<UUID> members) throws SQLException {
         Connection conn = DatabaseManager.getConnection();
 
+        // Remove any existing members for THIS clan first
         try (PreparedStatement delete = conn.prepareStatement("DELETE FROM clan_members WHERE clan = ?")) {
             delete.setObject(1, clanId);
             delete.executeUpdate();
         }
 
-        try (PreparedStatement insert = conn.prepareStatement("INSERT INTO clan_members (player, clan) VALUES (?, ?)")) {
+        // Upsert membership rows by PLAYER (player is PRIMARY KEY)
+        try (PreparedStatement merge = conn.prepareStatement(
+                "MERGE INTO clan_members (player, clan) KEY(player) VALUES (?, ?)")) {
+
             for (UUID player : members) {
-                insert.setObject(1, player);
-                insert.setObject(2, clanId);
-                insert.addBatch();
+                merge.setObject(1, player);
+                merge.setObject(2, clanId);
+                merge.addBatch();
             }
-            insert.executeBatch();
+            merge.executeBatch();
         }
     }
+
 
     public static void deleteClan(UUID clanId) throws SQLException {
         try (PreparedStatement ps = DatabaseManager.getConnection()

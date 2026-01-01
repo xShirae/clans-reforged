@@ -1,4 +1,3 @@
-// command/AllianceCommand.java
 package net.hosenka.command;
 
 import com.mojang.brigadier.arguments.StringArgumentType;

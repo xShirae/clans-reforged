@@ -2,25 +2,11 @@ package net.hosenka.clan;
 
 import java.util.*;
 
-/**
- * GD integration note:
- * - GriefDefender stores clan trusts using a clan "tag" string.
- * - That tag should be stable over time (renaming should not break plot trusts).
- * - Use 'tag' as the stable identifier, and 'name' as the display name.
- */
 public class Clan {
 
     private final UUID id;
-
-    /**
-     * Stable, unique, immutable identifier used by GD (and commands if you want).
-     * Examples: "alpha", "redteam", "knights"
-     */
     private final String tag;
-
-    /** Display name (can be changed without breaking GD trusts if tag is stable). */
     private String name;
-
     private String description = "";
 
     private final Set<UUID> members = new HashSet<>();
@@ -28,7 +14,7 @@ public class Clan {
     /** Optional. */
     private UUID allianceId = null;
 
-    /** Optional (but recommended). */
+    /** Optional. */
     private UUID leaderId = null;
 
     public Clan(UUID id, String tag, String name) {
@@ -41,17 +27,17 @@ public class Clan {
         return id;
     }
 
-    /** Stable identifier used by GD. */
+
     public String getTag() {
         return tag;
     }
 
-    /** Display name. */
+
     public String getName() {
         return name;
     }
 
-    /** Display name; does NOT change tag. */
+
     public void setName(String newName) {
         this.name = Objects.requireNonNull(newName, "newName");
     }
@@ -64,7 +50,7 @@ public class Clan {
         this.description = (description == null) ? "" : description;
     }
 
-    /** Unmodifiable view to prevent outside code from desyncing your registries. */
+
     public Set<UUID> getMembers() {
         return Collections.unmodifiableSet(members);
     }

@@ -1,4 +1,3 @@
-// alliance/AllianceRegistry.java
 package net.hosenka.alliance;
 
 import java.sql.SQLException;

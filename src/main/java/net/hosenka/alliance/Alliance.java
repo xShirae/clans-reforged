@@ -1,4 +1,3 @@
-// alliance/Alliance.java
 package net.hosenka.alliance;
 
 import java.util.HashSet;

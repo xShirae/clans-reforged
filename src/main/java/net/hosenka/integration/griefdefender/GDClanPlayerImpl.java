@@ -30,13 +30,11 @@ public class GDClanPlayerImpl implements ClanPlayer {
 
     @Override
     public void setRank(Rank rank) {
-        // Optional: if your mod supports ranks, persist it.
-        // For now, ignore (GD can still use leader/member).
     }
 
     @Override
     public Rank getRank() {
-        return this.clan.isLeader(playerId) ? CRRank.LEADER : CRRank.MEMBER;
+        return this.clan.isLeader(playerId) ? CRRank.MANAGER : CRRank.RESIDENT;
     }
 
     @Override
