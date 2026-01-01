@@ -100,7 +100,12 @@ public class GDClanPlayerImpl implements ClanPlayer {
         }
 
         // Fallback for offline players
+        var cp = ClanMembershipRegistry.getAnyClanPlayer(playerId);
+        if (cp != null && cp.getLastKnownName() != null) {
+            return cp.getLastKnownName();
+        }
         return playerId.toString();
+
     }
 
 
@@ -131,22 +136,24 @@ public class GDClanPlayerImpl implements ClanPlayer {
         var core = com.griefdefender.api.GriefDefender.getCore();
         var user = core.getUser(this.playerId);
         if (user == null) {
-            // Extremely unlikely, but better than returning null.
             throw new IllegalStateException("GriefDefender user not available for " + this.playerId);
         }
         return user.getPlayerData();
     }
 
 
+
     @Override
     public Claim getCurrentClaim() {
-        Object online = getOnlinePlayer();
-        if (online instanceof net.minecraft.server.level.ServerPlayer sp) {
-            var core = com.griefdefender.api.GriefDefender.getCore();
-            var world = core.getWorldUniqueId(sp.serverLevel()); // depends on GD API, may differ
+        var core = com.griefdefender.api.GriefDefender.getCore();
+        var user = core.getUser(this.playerId);
+        if (user == null) {
+            // If GD hasn't created/loaded a User object for this UUID, no claim context.
+            return null;
         }
-        return null;
+        return user.getPlayerData().getCurrentClaim();
     }
+
 
 }
 

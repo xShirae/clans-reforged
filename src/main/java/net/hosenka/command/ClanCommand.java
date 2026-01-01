@@ -46,10 +46,14 @@ public class ClanCommand {
                             // /clan create <name>  by executing on the <tag> node when <name> is missing.
                             .then(Commands.argument("tag", StringArgumentType.word())
 
-                                    // /clan create <name>   (auto-tag)  <-- important to avoid brigadier ambiguity
+                                    // /clan create <name>   (auto-tag)
                                     .executes(context -> {
                                         String name = StringArgumentType.getString(context, "tag");
-                                        UUID playerId = context.getSource().getPlayerOrException().getUUID();
+                                        var player = context.getSource().getPlayerOrException();
+                                        UUID playerId = player.getUUID();
+
+                                        // Track last-known name
+                                        ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
 
                                         if (ClanMembershipRegistry.isInClan(playerId)) {
                                             context.getSource().sendFailure(Component.literal("You're already in a clan. Leave it before creating a new one."));
@@ -57,7 +61,6 @@ public class ClanCommand {
                                         }
 
                                         UUID clanId = ClanRegistry.createClan(name, playerId);
-                                        ClanMembershipRegistry.joinClan(playerId, clanId);
                                         Clan clan = ClanRegistry.getClan(clanId);
 
                                         try {
@@ -85,7 +88,11 @@ public class ClanCommand {
                                             .executes(context -> {
                                                 String tag = StringArgumentType.getString(context, "tag");
                                                 String name = StringArgumentType.getString(context, "name");
-                                                UUID playerId = context.getSource().getPlayerOrException().getUUID();
+                                                var player = context.getSource().getPlayerOrException();
+                                                UUID playerId = player.getUUID();
+
+                                                // Track last-known name
+                                                ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
 
                                                 if (ClanMembershipRegistry.isInClan(playerId)) {
                                                     context.getSource().sendFailure(Component.literal("You're already in a clan. Leave it before creating a new one."));
@@ -111,7 +118,6 @@ public class ClanCommand {
                                                     return 0;
                                                 }
 
-                                                ClanMembershipRegistry.joinClan(playerId, clanId);
                                                 Clan clan = ClanRegistry.getClan(clanId);
 
                                                 try {
@@ -140,7 +146,11 @@ public class ClanCommand {
                             .then(Commands.argument("name", StringArgumentType.string())
                                     .executes(context -> {
                                         String name = StringArgumentType.getString(context, "name");
-                                        UUID playerId = context.getSource().getPlayerOrException().getUUID();
+                                        var player = context.getSource().getPlayerOrException();
+                                        UUID playerId = player.getUUID();
+
+                                        // Track last-known name
+                                        ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
 
                                         if (ClanMembershipRegistry.isInClan(playerId)) {
                                             context.getSource().sendFailure(Component.literal("You're already in a clan."));
@@ -174,7 +184,11 @@ public class ClanCommand {
                     /* ===================== LEAVE ===================== */
                     .then(Commands.literal("leave")
                             .executes(context -> {
-                                UUID playerId = context.getSource().getPlayerOrException().getUUID();
+                                var player = context.getSource().getPlayerOrException();
+                                UUID playerId = player.getUUID();
+
+                                // Track last-known name
+                                ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
 
                                 if (!ClanMembershipRegistry.isInClan(playerId)) {
                                     context.getSource().sendFailure(Component.literal("You're not in a clan."));
@@ -336,7 +350,12 @@ public class ClanCommand {
                     /* ===================== DISBAND ===================== */
                     .then(Commands.literal("disband")
                             .executes(context -> {
-                                UUID playerId = context.getSource().getPlayerOrException().getUUID();
+                                var player = context.getSource().getPlayerOrException();
+                                UUID playerId = player.getUUID();
+
+                                // Track last-known name
+                                ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
+
                                 UUID clanId = ClanMembershipRegistry.getClan(playerId);
 
                                 if (clanId == null) {
@@ -395,7 +414,12 @@ public class ClanCommand {
                     .then(Commands.literal("invite")
                             .then(Commands.argument("player", StringArgumentType.word())
                                     .executes(context -> {
-                                        UUID inviterId = context.getSource().getPlayerOrException().getUUID();
+                                        var inviter = context.getSource().getPlayerOrException();
+                                        UUID inviterId = inviter.getUUID();
+
+                                        // Track last-known name for inviter
+                                        ClanMembershipRegistry.updateLastKnownName(inviterId, inviter.getName().getString());
+
                                         UUID clanId = ClanMembershipRegistry.getClan(inviterId);
 
                                         if (clanId == null) {
@@ -420,6 +444,9 @@ public class ClanCommand {
 
                                         UUID targetId = targetProfile.getId();
 
+                                        // Store last-known name for target (helps GD/your UI for offline players)
+                                        ClanMembershipRegistry.updateLastKnownName(targetId, targetProfile.getName());
+
                                         if (ClanMembershipRegistry.isInClan(targetId)) {
                                             context.getSource().sendFailure(Component.literal("That player is already in a clan."));
                                             return 0;
@@ -432,11 +459,14 @@ public class ClanCommand {
                                         return 1;
                                     })))
 
-
                     /* ===================== ACCEPT ===================== */
                     .then(Commands.literal("accept")
                             .executes(context -> {
-                                UUID playerId = context.getSource().getPlayerOrException().getUUID();
+                                var player = context.getSource().getPlayerOrException();
+                                UUID playerId = player.getUUID();
+
+                                // Track last-known name
+                                ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
 
                                 if (ClanMembershipRegistry.isInClan(playerId)) {
                                     context.getSource().sendFailure(Component.literal("You're already in a clan."));
@@ -476,7 +506,11 @@ public class ClanCommand {
                     /* ===================== STATUS ===================== */
                     .then(Commands.literal("status")
                             .executes(context -> {
-                                UUID playerId = context.getSource().getPlayerOrException().getUUID();
+                                var player = context.getSource().getPlayerOrException();
+                                UUID playerId = player.getUUID();
+
+                                // Track last-known name
+                                ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
 
                                 UUID clanId = ClanMembershipRegistry.getClan(playerId);
                                 Clan clan = clanId != null ? ClanRegistry.getClan(clanId) : null;
@@ -507,7 +541,11 @@ public class ClanCommand {
                                             .executes(context -> {
                                                 String oldKey = StringArgumentType.getString(context, "old");
                                                 String newName = StringArgumentType.getString(context, "new");
-                                                UUID playerId = context.getSource().getPlayerOrException().getUUID();
+                                                var player = context.getSource().getPlayerOrException();
+                                                UUID playerId = player.getUUID();
+
+                                                // Track last-known name
+                                                ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
 
                                                 Clan targetClan = findClanByTagOrName(oldKey);
                                                 if (targetClan == null) {

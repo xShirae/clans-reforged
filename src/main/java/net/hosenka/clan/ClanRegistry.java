@@ -4,6 +4,8 @@ import net.hosenka.alliance.AllianceRegistry;
 import net.hosenka.database.ClanDAO;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import net.hosenka.clan.ClanRank;
+
 
 import java.sql.SQLException;
 import java.util.*;
@@ -24,6 +26,7 @@ public class ClanRegistry {
         String tag = ensureUniqueTag(baseTag);
 
         Clan clan = new Clan(id, tag, name);
+        ClanMembershipRegistry.joinClan(leaderId, id, ClanRank.LEADER);
         clan.setLeaderId(leaderId);
         clan.addMember(leaderId);
 
@@ -41,6 +44,7 @@ public class ClanRegistry {
         String unique = ensureUniqueTag(sanitized, null);
 
         Clan clan = new Clan(id, unique, name);
+        ClanMembershipRegistry.joinClan(leaderId, id, ClanRank.LEADER);
         clan.setLeaderId(leaderId);
         clan.addMember(leaderId);
 
@@ -75,6 +79,7 @@ public class ClanRegistry {
 
 
 
+
     public static Clan getByName(String name) {
         if (name == null) return null;
         for (Clan clan : clans.values()) {
@@ -97,8 +102,10 @@ public class ClanRegistry {
                 tagToClanId.put(clan.getTag().toLowerCase(Locale.ROOT), clan.getId());
 
                 for (UUID memberId : clan.getMembers()) {
-                    ClanMembershipRegistry.joinClan(memberId, clan.getId());
+                    ClanRank rank = clan.isLeader(memberId) ? ClanRank.LEADER : ClanRank.MEMBER;
+                    ClanMembershipRegistry.joinClan(memberId, clan.getId(), rank);
                 }
+
 
                 // SAFE MERGE
                 ClanDAO.saveClan(clan);
