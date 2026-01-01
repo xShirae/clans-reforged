@@ -39,13 +39,18 @@ public class ClansReforged implements ModInitializer {
                 return;
             }
 
+            // IMPORTANT: don't even try to touch GD code if mod isn't present at runtime
+            if (!FabricLoader.getInstance().isModLoaded("griefdefender")) {
+                LOGGER.info("GriefDefender not installed; skipping GD integration.");
+                return;
+            }
+
             // Helper that tries init + injection
             final Runnable tryInitAndInject = () -> {
                 try {
                     net.hosenka.integration.griefdefender.GDIntegration.init(server);
                 } catch (Throwable t) {
                     LOGGER.error("Failed to initialize GD integration", t);
-                    // don't return; we still might want to retry once
                 }
 
                 final var provider = net.hosenka.integration.griefdefender.GDIntegration.getClanProvider();
@@ -54,6 +59,7 @@ public class ClansReforged implements ModInitializer {
                 if (registered && provider != null) {
                     try {
                         net.hosenka.integration.griefdefender.CRGDClanCommands.register(server, provider);
+
                         System.out.println("[ClansReforged] Injected Fabric GD clan commands (/gd clan ...).");
                     } catch (Throwable t) {
                         LOGGER.error("Failed to inject Fabric GD clan commands", t);
@@ -69,11 +75,7 @@ public class ClansReforged implements ModInitializer {
             // 2) If GD wasn't ready, retry once next tick
             if (!net.hosenka.integration.griefdefender.GDIntegration.isRegistered()
                     || net.hosenka.integration.griefdefender.GDIntegration.getClanProvider() == null) {
-
-                server.execute(() -> {
-                    // retry once on main server thread
-                    tryInitAndInject.run();
-                });
+                server.execute(tryInitAndInject);
             }
 
             // 3) Optional: serializer sanity check (debug only)
@@ -98,6 +100,7 @@ public class ClansReforged implements ModInitializer {
                 }
             }
         });
+
 
 
     }
