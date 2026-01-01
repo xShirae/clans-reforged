@@ -99,13 +99,12 @@ public class GDClanImpl implements Clan {
     @Override
     public List<Rank> getRanks() {
         return List.of(
-                CRRank.RESIDENT,
-                CRRank.ACCESSOR,
-                CRRank.BUILDER,
-                CRRank.CONTAINER,
-                CRRank.MANAGER
+                CRRank.MEMBER,
+                CRRank.RIGHT_ARM,
+                CRRank.LEADER
         );
     }
+
 
 
     @Override

@@ -5,6 +5,8 @@ import com.griefdefender.api.ClanPlayer;
 import com.griefdefender.api.claim.Claim;
 import com.griefdefender.api.clan.Rank;
 import com.griefdefender.api.data.PlayerData;
+import net.hosenka.clan.ClanMembershipRegistry;
+import net.hosenka.clan.ClanRank;
 
 import java.util.UUID;
 
@@ -30,11 +32,49 @@ public class GDClanPlayerImpl implements ClanPlayer {
 
     @Override
     public void setRank(Rank rank) {
+        // Called by GD-side features; must not be a no-op
+        CRRank target = (rank instanceof CRRank cr) ? cr : CRRank.byName(rank.getName());
+
+        // Promote to leader = transfer leadership
+        if (target == CRRank.LEADER) {
+            UUID oldLeader = clan.getLeaderId();
+            clan.setLeaderId(this.playerId);
+
+            // Old leader becomes RIGHT_ARM (reasonable default)
+            if (oldLeader != null && !oldLeader.equals(this.playerId)) {
+                ClanMembershipRegistry.setRank(oldLeader, ClanRank.RIGHT_ARM);
+            }
+
+            ClanMembershipRegistry.setRank(this.playerId, ClanRank.LEADER);
+            return;
+        }
+
+        // Don't silently demote the current leader via setRank()
+        if (clan.isLeader(this.playerId)) {
+            // Keep leader rank stable
+            ClanMembershipRegistry.setRank(this.playerId, ClanRank.LEADER);
+            return;
+        }
+
+        ClanRank mapped = (target == CRRank.RIGHT_ARM) ? ClanRank.RIGHT_ARM : ClanRank.MEMBER;
+        ClanMembershipRegistry.setRank(this.playerId, mapped);
     }
 
     @Override
     public Rank getRank() {
-        return this.clan.isLeader(playerId) ? CRRank.MANAGER : CRRank.RESIDENT;
+        // Leader is authoritative on the Clan object
+        if (this.clan.isLeader(playerId)) {
+            return CRRank.LEADER;
+        }
+
+        ClanRank r = ClanMembershipRegistry.getRank(playerId);
+        if (r == null) return CRRank.MEMBER;
+
+        return switch (r) {
+            case RIGHT_ARM -> CRRank.RIGHT_ARM;
+            case LEADER -> CRRank.LEADER;   // if stored, still fine
+            default -> CRRank.MEMBER;
+        };
     }
 
     @Override

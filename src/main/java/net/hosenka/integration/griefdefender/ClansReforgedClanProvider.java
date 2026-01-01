@@ -73,13 +73,13 @@ public class ClansReforgedClanProvider implements ClanProvider {
     @Override
     public List<Rank> getClanRanks(String tag) {
         return List.of(
-                CRRank.RESIDENT,
-                CRRank.ACCESSOR,
-                CRRank.BUILDER,
-                CRRank.CONTAINER,
-                CRRank.MANAGER
+                CRRank.MEMBER,
+                CRRank.RIGHT_ARM,
+                CRRank.LEADER
         );
     }
+
+
 
 
     @Override

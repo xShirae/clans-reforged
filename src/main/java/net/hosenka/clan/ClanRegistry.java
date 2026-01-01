@@ -75,7 +75,6 @@ public class ClanRegistry {
 
 
 
-    /** Keep for convenience; slower scan. Prefer tag. */
     public static Clan getByName(String name) {
         if (name == null) return null;
         for (Clan clan : clans.values()) {
@@ -91,7 +90,7 @@ public class ClanRegistry {
             List<Clan> loadedClans = ClanDAO.loadAllClans();
             clans.clear();
             tagToClanId.clear();
-            ClanMembershipRegistry.getAllMemberships().clear();
+            ClanMembershipRegistry.clear();
 
             for (Clan clan : loadedClans) {
                 clans.put(clan.getId(), clan);
@@ -101,7 +100,7 @@ public class ClanRegistry {
                     ClanMembershipRegistry.joinClan(memberId, clan.getId());
                 }
 
-                // Optional: write back tags for migrated rows (safe MERGE)
+                // SAFE MERGE
                 ClanDAO.saveClan(clan);
             }
 
