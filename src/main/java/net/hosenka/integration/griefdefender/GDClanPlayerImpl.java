@@ -2,12 +2,16 @@ package net.hosenka.integration.griefdefender;
 
 import com.griefdefender.api.Clan;
 import com.griefdefender.api.ClanPlayer;
+import com.griefdefender.api.GriefDefender;
+import com.griefdefender.api.User;
 import com.griefdefender.api.claim.Claim;
 import com.griefdefender.api.clan.Rank;
 import com.griefdefender.api.data.PlayerData;
 import net.hosenka.clan.ClanMembershipRegistry;
 import net.hosenka.clan.ClanRank;
+import net.hosenka.database.ClanDAO;
 
+import java.sql.SQLException;
 import java.util.UUID;
 
 public class GDClanPlayerImpl implements ClanPlayer {
@@ -15,9 +19,21 @@ public class GDClanPlayerImpl implements ClanPlayer {
     private final UUID playerId;
     private final net.hosenka.clan.Clan clan;
 
+    // cache validation
+    private final UUID clanId;
+
+    // GDHooks-style: keep a User reference
+    private final User user;
+
     public GDClanPlayerImpl(UUID playerId, net.hosenka.clan.Clan clan) {
         this.playerId = playerId;
         this.clan = clan;
+        this.clanId = clan.getId();
+        this.user = GriefDefender.getCore().getUser(playerId); // typically non-null in GD
+    }
+
+    UUID getClanIdInternal() {
+        return this.clanId;
     }
 
     @Override
@@ -27,12 +43,22 @@ public class GDClanPlayerImpl implements ClanPlayer {
 
     @Override
     public Clan getClan() {
+        var p = GriefDefender.getCore().getClanProvider();
+        if (p instanceof ClansReforgedClanProvider cr) {
+            Clan cached = cr.getClanById(this.clanId);
+            if (cached != null) return cached;
+        }
         return new GDClanImpl(clan);
     }
 
     @Override
     public void setRank(Rank rank) {
-        // Called by GD-side features; must not be a no-op
+        // guard: only allow rank changes for members of THIS clan
+        UUID currentClan = ClanMembershipRegistry.getClan(this.playerId);
+        if (currentClan == null || !currentClan.equals(this.clanId)) {
+            return;
+        }
+
         CRRank target = (rank instanceof CRRank cr) ? cr : CRRank.byName(rank.getName());
 
         // Promote to leader = transfer leadership
@@ -40,39 +66,52 @@ public class GDClanPlayerImpl implements ClanPlayer {
             UUID oldLeader = clan.getLeaderId();
             clan.setLeaderId(this.playerId);
 
-            // Old leader becomes RIGHT_ARM (reasonable default)
             if (oldLeader != null && !oldLeader.equals(this.playerId)) {
-                ClanMembershipRegistry.setRank(oldLeader, ClanRank.RIGHT_ARM);
+                // only change old leader rank if they still belong to this clan
+                UUID oldLeaderClan = ClanMembershipRegistry.getClan(oldLeader);
+                if (oldLeaderClan != null && oldLeaderClan.equals(this.clanId)) {
+                    ClanMembershipRegistry.setRank(oldLeader, ClanRank.RIGHT_ARM);
+                }
             }
 
             ClanMembershipRegistry.setRank(this.playerId, ClanRank.LEADER);
+
+            try {
+                ClanDAO.saveClan(clan);
+                ClanDAO.saveMembers(clan); // uses the new overload
+            } catch (SQLException e) {
+                net.hosenka.util.CRDebug.log("Failed to persist clan leader/rank change", e);
+            }
+
             return;
         }
-
-        // Don't silently demote the current leader via setRank()
+        // Don’t silently demote current leader via setRank()
         if (clan.isLeader(this.playerId)) {
-            // Keep leader rank stable
             ClanMembershipRegistry.setRank(this.playerId, ClanRank.LEADER);
             return;
         }
 
         ClanRank mapped = (target == CRRank.RIGHT_ARM) ? ClanRank.RIGHT_ARM : ClanRank.MEMBER;
         ClanMembershipRegistry.setRank(this.playerId, mapped);
+
+        try {
+            ClanDAO.saveMembers(clan);
+        } catch (SQLException e) {
+            net.hosenka.util.CRDebug.log("Failed to persist clan rank change", e);
+        }
+
     }
 
     @Override
     public Rank getRank() {
-        // Leader is authoritative on the Clan object
-        if (this.clan.isLeader(playerId)) {
-            return CRRank.LEADER;
-        }
+        if (clan.isLeader(playerId)) return CRRank.LEADER;
 
         ClanRank r = ClanMembershipRegistry.getRank(playerId);
         if (r == null) return CRRank.MEMBER;
 
         return switch (r) {
             case RIGHT_ARM -> CRRank.RIGHT_ARM;
-            case LEADER -> CRRank.LEADER;   // if stored, still fine
+            case LEADER -> CRRank.LEADER;
             default -> CRRank.MEMBER;
         };
     }
@@ -82,79 +121,55 @@ public class GDClanPlayerImpl implements ClanPlayer {
         return clan.isLeader(playerId);
     }
 
-
-    public String getName() {
-        return playerId.toString(); // Or lookup real name
+    @Override
+    public boolean isOnline() {
+        // GDHooks-style
+        return user != null && user.isOnline();
     }
 
     @Override
     public String getFriendlyName() {
-        if (ServerHolder.get() != null) {
-            var player = ServerHolder.get()
-                    .getPlayerList()
-                    .getPlayer(playerId);
-
-            if (player != null) {
-                return player.getName().getString();
-            }
+        // prefer GD User name
+        if (user != null) {
+            String n = user.getFriendlyName();
+            if (n != null && !n.isBlank()) return n;
         }
 
-        // Fallback for offline players
+        // fallback to cached last-known name from your registry
         var cp = ClanMembershipRegistry.getAnyClanPlayer(playerId);
         if (cp != null && cp.getLastKnownName() != null) {
             return cp.getLastKnownName();
         }
+
         return playerId.toString();
-
     }
-
 
     @Override
     public String getIdentifier() {
-        return this.playerId.toString();
-    }
-
-
-    @Override
-    public boolean isOnline() {
-        if (ServerHolder.get() == null) {
-            return false;
+        // GDHooks-style (but keep UUID fallback)
+        if (user != null) {
+            String id = user.getIdentifier();
+            if (id != null && !id.isBlank()) return id;
         }
-        return ServerHolder.get().getPlayerList().getPlayer(playerId) != null;
+        return playerId.toString();
     }
 
     @Override
     public Object getOnlinePlayer() {
-        if (ServerHolder.get() == null) {
-            return null;
-        }
-        return ServerHolder.get().getPlayerList().getPlayer(playerId);
+        return user != null ? user.getOnlinePlayer() : null;
     }
 
     @Override
     public PlayerData getPlayerData() {
-        var core = com.griefdefender.api.GriefDefender.getCore();
-        var user = core.getUser(this.playerId);
         if (user == null) {
             throw new IllegalStateException("GriefDefender user not available for " + this.playerId);
         }
         return user.getPlayerData();
     }
 
-
-
     @Override
     public Claim getCurrentClaim() {
-        var core = com.griefdefender.api.GriefDefender.getCore();
-        var user = core.getUser(this.playerId);
-        if (user == null) {
-            // If GD hasn't created/loaded a User object for this UUID, no claim context.
-            return null;
-        }
+        if (user == null) return null;
         return user.getPlayerData().getCurrentClaim();
     }
-
-
 }
-
-

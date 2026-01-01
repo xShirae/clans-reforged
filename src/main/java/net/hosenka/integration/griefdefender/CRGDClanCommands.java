@@ -269,4 +269,6 @@ public final class CRGDClanCommands {
             default -> forTrust ? TrustTypes.BUILDER : TrustTypes.NONE;
         };
     }
+
+
 }

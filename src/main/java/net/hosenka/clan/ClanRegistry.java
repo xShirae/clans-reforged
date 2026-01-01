@@ -93,6 +93,8 @@ public class ClanRegistry {
     public static void loadFromDatabase() {
         try {
             List<Clan> loadedClans = ClanDAO.loadAllClans();
+            Map<UUID, Map<UUID, ClanRank>> loadedRanks = ClanDAO.loadAllMemberRanks();
+
             clans.clear();
             tagToClanId.clear();
             ClanMembershipRegistry.clear();
@@ -101,14 +103,32 @@ public class ClanRegistry {
                 clans.put(clan.getId(), clan);
                 tagToClanId.put(clan.getTag().toLowerCase(Locale.ROOT), clan.getId());
 
-                for (UUID memberId : clan.getMembers()) {
-                    ClanRank rank = clan.isLeader(memberId) ? ClanRank.LEADER : ClanRank.MEMBER;
+                Map<UUID, ClanRank> members = loadedRanks.getOrDefault(clan.getId(), Collections.emptyMap());
+
+                // Load members + restore ranks
+                for (var entry : members.entrySet()) {
+                    UUID memberId = entry.getKey();
+                    ClanRank rank = entry.getValue();
+
+                    clan.addMember(memberId);
+
+                    // Leader column is authoritative
+                    if (clan.getLeaderId() != null && clan.getLeaderId().equals(memberId)) {
+                        rank = ClanRank.LEADER;
+                    } else if (rank == ClanRank.LEADER) {
+                        // if DB says LEADER but clan.leaderId differs, downgrade
+                        rank = ClanRank.MEMBER;
+                    }
+
                     ClanMembershipRegistry.joinClan(memberId, clan.getId(), rank);
                 }
 
-
-                // SAFE MERGE
-                ClanDAO.saveClan(clan);
+                // Ensure leader exists in members even if missing from clan_members table
+                UUID leaderId = clan.getLeaderId();
+                if (leaderId != null && !clan.isMember(leaderId)) {
+                    clan.addMember(leaderId);
+                    ClanMembershipRegistry.joinClan(leaderId, clan.getId(), ClanRank.LEADER);
+                }
             }
 
             System.out.println("[ClansReforged] Loaded " + clans.size() + " clans from database.");
@@ -117,6 +137,8 @@ public class ClanRegistry {
             e.printStackTrace();
         }
     }
+
+
 
 
     public static void cleanupEmptyClans() {

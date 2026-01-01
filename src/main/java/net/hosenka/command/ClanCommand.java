@@ -7,12 +7,20 @@ import net.hosenka.alliance.Alliance;
 import net.hosenka.alliance.AllianceRegistry;
 import net.hosenka.clan.Clan;
 import net.hosenka.clan.ClanMembershipRegistry;
+import net.hosenka.clan.ClanRank;
 import net.hosenka.clan.ClanRegistry;
 import net.hosenka.database.ClanDAO;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
+
 
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -28,6 +36,46 @@ public class ClanCommand {
 
         return ClanRegistry.getByName(input);
     }
+
+    private static boolean canManageHome(UUID playerId, Clan clan) {
+        if (clan.isLeader(playerId)) return true;
+        ClanRank rank = ClanMembershipRegistry.getRank(playerId);
+        return rank == ClanRank.RIGHT_ARM || rank == ClanRank.LEADER;
+    }
+
+    private static ServerLevel resolveLevel(net.minecraft.server.MinecraftServer server, String dim) {
+        ResourceLocation rl = ResourceLocation.tryParse(dim);
+        if (rl == null) return null;
+        ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, rl);
+        return server.getLevel(key);
+    }
+
+    private static Map<UUID, ClanRank> buildMemberRanks(net.hosenka.clan.Clan clan) {
+        Map<UUID, ClanRank> out = new HashMap<>();
+        UUID leader = clan.getLeaderId();
+
+        for (UUID member : clan.getMembers()) {
+            ClanRank r;
+
+            // Leader is authoritative from clan.leaderId
+            if (leader != null && leader.equals(member)) {
+                r = ClanRank.LEADER;
+            } else {
+                ClanRank stored = ClanMembershipRegistry.getRank(member);
+                r = (stored == null) ? ClanRank.MEMBER : stored;
+
+                // Don’t store LEADER in member ranks unless it matches leaderId
+                if (r == ClanRank.LEADER) r = ClanRank.MEMBER;
+            }
+
+            out.put(member, r);
+        }
+
+        return out;
+    }
+
+
+
 
     private static boolean isValidTag(String tag) {
         return tag != null && tag.matches(TAG_REGEX);
@@ -65,7 +113,8 @@ public class ClanCommand {
 
                                         try {
                                             ClanDAO.saveClan(clan);
-                                            ClanDAO.saveMembers(clanId, clan.getMembers());
+                                            ClanDAO.saveMembers(clanId, buildMemberRanks(clan));
+
                                         } catch (SQLException e) {
                                             // rollback in-memory state
                                             ClanMembershipRegistry.leaveClan(playerId);
@@ -122,7 +171,8 @@ public class ClanCommand {
 
                                                 try {
                                                     ClanDAO.saveClan(clan);
-                                                    ClanDAO.saveMembers(clanId, clan.getMembers());
+                                                    ClanDAO.saveMembers(clanId, buildMemberRanks(clan));
+
                                                 } catch (SQLException e) {
                                                     // rollback in-memory state
                                                     ClanMembershipRegistry.leaveClan(playerId);
@@ -167,7 +217,7 @@ public class ClanCommand {
                                         ClanMembershipRegistry.joinClan(playerId, targetClan.getId());
 
                                         try {
-                                            ClanDAO.saveMembers(targetClan.getId(), targetClan.getMembers());
+                                            ClanDAO.saveMembers(targetClan.getId(), buildMemberRanks(targetClan));
                                         } catch (SQLException e) {
                                             e.printStackTrace();
                                             context.getSource().sendFailure(Component.literal("Failed to save membership to database."));
@@ -180,6 +230,140 @@ public class ClanCommand {
                                         );
                                         return 1;
                                     })))
+
+                    /* ===================== HOME ===================== */
+                    .then(Commands.literal("sethome")
+                            .executes(ctx -> {
+                                var player = ctx.getSource().getPlayerOrException();
+                                UUID playerId = player.getUUID();
+
+                                ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
+
+                                UUID clanId = ClanMembershipRegistry.getClan(playerId);
+                                if (clanId == null) {
+                                    ctx.getSource().sendFailure(Component.literal("You're not in a clan."));
+                                    return 0;
+                                }
+
+                                Clan clan = ClanRegistry.getClan(clanId);
+                                if (clan == null) {
+                                    ctx.getSource().sendFailure(Component.literal("Clan not found."));
+                                    return 0;
+                                }
+
+                                if (!canManageHome(playerId, clan)) {
+                                    ctx.getSource().sendFailure(Component.literal("You must be Leader or Right Arm to set the clan home."));
+                                    return 0;
+                                }
+
+                                String dim = player.serverLevel().dimension().location().toString();
+                                clan.setHome(
+                                        dim,
+                                        player.getX(),
+                                        player.getY(),
+                                        player.getZ(),
+                                        player.getYRot(),
+                                        player.getXRot(),
+                                        "local"
+                                );
+
+                                try {
+                                    ClanDAO.saveClan(clan);
+                                } catch (SQLException e) {
+                                    e.printStackTrace();
+                                    ctx.getSource().sendFailure(Component.literal("Failed to save clan home to database."));
+                                    return 0;
+                                }
+
+                                ctx.getSource().sendSuccess(() -> Component.literal("Clan home set."), false);
+                                return 1;})
+                    )
+
+                    .then(Commands.literal("home")
+                            .executes(ctx -> {
+                                var player = ctx.getSource().getPlayerOrException();
+                                UUID playerId = player.getUUID();
+
+                                ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
+
+                                UUID clanId = ClanMembershipRegistry.getClan(playerId);
+                                if (clanId == null) {
+                                    ctx.getSource().sendFailure(Component.literal("You're not in a clan."));
+                                    return 0;
+                                }
+
+                                Clan clan = ClanRegistry.getClan(clanId);
+                                if (clan == null) {
+                                    ctx.getSource().sendFailure(Component.literal("Clan not found."));
+                                    return 0;
+                                }
+
+                                if (!clan.hasHome()) {
+                                    ctx.getSource().sendFailure(Component.literal("Your clan does not have a home set."));
+                                    return 0;
+                                }
+
+                                ServerLevel target = resolveLevel(ctx.getSource().getServer(), clan.getHomeDimension());
+                                if (target == null) {
+                                    ctx.getSource().sendFailure(Component.literal("Clan home dimension is not available: " + clan.getHomeDimension()));
+                                    return 0;
+                                }
+
+                                player.teleportTo(
+                                        target,
+                                        clan.getHomeX(),
+                                        clan.getHomeY(),
+                                        clan.getHomeZ(),
+                                        clan.getHomeYaw(),
+                                        clan.getHomePitch()
+                                );
+
+                                ctx.getSource().sendSuccess(() -> Component.literal("Teleported to clan home."), false);
+                                return 1;
+                            })
+                    )
+
+                    .then(Commands.literal("delhome")
+                            .executes(ctx -> {
+                                var player = ctx.getSource().getPlayerOrException();
+                                UUID playerId = player.getUUID();
+
+                                ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
+
+                                UUID clanId = ClanMembershipRegistry.getClan(playerId);
+                                if (clanId == null) {
+                                    ctx.getSource().sendFailure(Component.literal("You're not in a clan."));
+                                    return 0;
+                                }
+
+                                Clan clan = ClanRegistry.getClan(clanId);
+                                if (clan == null) {
+                                    ctx.getSource().sendFailure(Component.literal("Clan not found."));
+                                    return 0;
+                                }
+
+                                if (!canManageHome(playerId, clan)) {
+                                    ctx.getSource().sendFailure(Component.literal("You must be Leader or Right Arm to delete the clan home."));
+                                    return 0;
+                                }
+
+                                clan.clearHome();
+
+                                try {
+                                    ClanDAO.saveClan(clan);
+                                } catch (SQLException e) {
+                                    e.printStackTrace();
+                                    ctx.getSource().sendFailure(Component.literal("Failed to save clan home removal to database."));
+                                    return 0;
+                                }
+
+                                ctx.getSource().sendSuccess(() -> Component.literal("Clan home removed."), false);
+                                return 1;
+                            })
+                    )
+
+
+
 
                     /* ===================== LEAVE ===================== */
                     .then(Commands.literal("leave")
@@ -201,7 +385,8 @@ public class ClanCommand {
                                 if (clan != null) {
                                     clan.removeMember(playerId);
                                     try {
-                                        ClanDAO.saveMembers(clanId, clan.getMembers());
+                                        ClanDAO.saveMembers(clanId, buildMemberRanks(clan));
+
                                     } catch (SQLException e) {
                                         e.printStackTrace();
                                         context.getSource().sendFailure(Component.literal("Failed to save membership to database."));
@@ -490,7 +675,7 @@ public class ClanCommand {
                                 ClanRegistry.clearInvite(playerId);
 
                                 try {
-                                    ClanDAO.saveMembers(invitedClanId, clan.getMembers());
+                                    ClanDAO.saveMembers(invitedClanId, buildMemberRanks(clan));
                                 } catch (SQLException e) {
                                     e.printStackTrace();
                                     context.getSource().sendFailure(Component.literal("Failed to save membership to database."));
@@ -585,5 +770,10 @@ public class ClanCommand {
                                             }))))
             );
         });
+
+
     }
+
+
+
 }

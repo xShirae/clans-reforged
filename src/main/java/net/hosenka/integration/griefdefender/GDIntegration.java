@@ -52,4 +52,11 @@ public final class GDIntegration {
     public static boolean isRegistered() {
         return registered;
     }
+
+    public static void clearCachesIfPresent() {
+        if (clanProvider != null) {
+            clanProvider.clearCaches();
+        }
+    }
+
 }
