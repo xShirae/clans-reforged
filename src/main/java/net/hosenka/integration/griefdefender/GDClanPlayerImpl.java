@@ -123,9 +123,11 @@ public class GDClanPlayerImpl implements ClanPlayer {
 
     @Override
     public boolean isOnline() {
-        // GDHooks-style
-        return user != null && user.isOnline();
+        if (this.user != null) return this.user.isOnline();
+        if (ServerHolder.get() == null) return false;
+        return ServerHolder.get().getPlayerList().getPlayer(this.playerId) != null;
     }
+
 
     @Override
     public String getFriendlyName() {
@@ -156,15 +158,28 @@ public class GDClanPlayerImpl implements ClanPlayer {
 
     @Override
     public Object getOnlinePlayer() {
-        return user != null ? user.getOnlinePlayer() : null;
+        if (this.user != null) return this.user.getOnlinePlayer();
+        if (ServerHolder.get() == null) return null;
+        return ServerHolder.get().getPlayerList().getPlayer(this.playerId);
     }
 
     @Override
     public PlayerData getPlayerData() {
-        if (user == null) {
-            throw new IllegalStateException("GriefDefender user not available for " + this.playerId);
+        User u = this.user != null ? this.user : GriefDefender.getCore().getUser(this.playerId);
+        if (u != null) {
+            return u.getPlayerData();
         }
-        return user.getPlayerData();
+
+        // Fallback (no throw): use overworld playerdata if possible
+        var server = ServerHolder.get();
+        if (server != null) {
+            var overworld = server.overworld();
+            UUID worldId = GriefDefender.getCore().getWorldUniqueId(overworld);
+            return GriefDefender.getCore().getPlayerData(worldId, this.playerId);
+        }
+
+        // Very early startup only; still avoid crashing GD workflows if possible
+        throw new IllegalStateException("Unable to resolve PlayerData for " + this.playerId);
     }
 
     @Override

@@ -10,6 +10,7 @@ import net.hosenka.clan.ClanMembershipRegistry;
 import net.hosenka.clan.ClanRank;
 import net.hosenka.clan.ClanRegistry;
 import net.hosenka.database.ClanDAO;
+import net.hosenka.integration.griefdefender.GDIntegration;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -18,8 +19,8 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 
-
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -74,8 +75,19 @@ public class ClanCommand {
         return out;
     }
 
+    // GD cache invalidation helper (2)
+    private static void gdInvalidate(UUID clanId, UUID... players) {
+        var cp = GDIntegration.getClanProvider();
+        if (cp == null) return;
 
+        if (clanId != null) cp.invalidateClan(clanId);
 
+        if (players != null) {
+            for (UUID p : players) {
+                if (p != null) cp.invalidatePlayer(p);
+            }
+        }
+    }
 
     private static boolean isValidTag(String tag) {
         return tag != null && tag.matches(TAG_REGEX);
@@ -88,10 +100,6 @@ public class ClanCommand {
                     /* ===================== CREATE ===================== */
                     .then(Commands.literal("create")
 
-                            // Branch A:
-                            // /clan create <tag> <name>
-                            // plus we ALSO allow:
-                            // /clan create <name>  by executing on the <tag> node when <name> is missing.
                             .then(Commands.argument("tag", StringArgumentType.word())
 
                                     // /clan create <name>   (auto-tag)
@@ -114,7 +122,6 @@ public class ClanCommand {
                                         try {
                                             ClanDAO.saveClan(clan);
                                             ClanDAO.saveMembers(clanId, buildMemberRanks(clan));
-
                                         } catch (SQLException e) {
                                             // rollback in-memory state
                                             ClanMembershipRegistry.leaveClan(playerId);
@@ -124,6 +131,9 @@ public class ClanCommand {
                                             context.getSource().sendFailure(Component.literal("Failed to save clan to database."));
                                             return 0;
                                         }
+
+                                        // invalidate caches
+                                        gdInvalidate(clanId, playerId);
 
                                         context.getSource().sendSuccess(
                                                 () -> Component.literal("Clan created: " + name + " (tag: " + clan.getTag() + ")"),
@@ -153,7 +163,6 @@ public class ClanCommand {
                                                     return 0;
                                                 }
 
-                                                // Don’t auto-mutate explicit tags (like adding -2); enforce uniqueness here.
                                                 if (ClanRegistry.getByTag(tag) != null) {
                                                     context.getSource().sendFailure(Component.literal("That clan tag is already taken."));
                                                     return 0;
@@ -172,7 +181,6 @@ public class ClanCommand {
                                                 try {
                                                     ClanDAO.saveClan(clan);
                                                     ClanDAO.saveMembers(clanId, buildMemberRanks(clan));
-
                                                 } catch (SQLException e) {
                                                     // rollback in-memory state
                                                     ClanMembershipRegistry.leaveClan(playerId);
@@ -182,6 +190,9 @@ public class ClanCommand {
                                                     context.getSource().sendFailure(Component.literal("Failed to save clan to database."));
                                                     return 0;
                                                 }
+
+                                                // invalidate caches
+                                                gdInvalidate(clanId, playerId);
 
                                                 context.getSource().sendSuccess(
                                                         () -> Component.literal("Clan created: " + name + " (tag: " + clan.getTag() + ")"),
@@ -199,7 +210,6 @@ public class ClanCommand {
                                         var player = context.getSource().getPlayerOrException();
                                         UUID playerId = player.getUUID();
 
-                                        // Track last-known name
                                         ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
 
                                         if (ClanMembershipRegistry.isInClan(playerId)) {
@@ -223,6 +233,9 @@ public class ClanCommand {
                                             context.getSource().sendFailure(Component.literal("Failed to save membership to database."));
                                             return 0;
                                         }
+
+                                        // invalidate caches
+                                        gdInvalidate(targetClan.getId(), playerId);
 
                                         context.getSource().sendSuccess(
                                                 () -> Component.literal("You have joined the clan: " + targetClan.getName() + " (tag: " + targetClan.getTag() + ")"),
@@ -275,8 +288,12 @@ public class ClanCommand {
                                     return 0;
                                 }
 
+                                // invalidate caches
+                                gdInvalidate(clanId);
+
                                 ctx.getSource().sendSuccess(() -> Component.literal("Clan home set."), false);
-                                return 1;})
+                                return 1;
+                            })
                     )
 
                     .then(Commands.literal("home")
@@ -357,13 +374,13 @@ public class ClanCommand {
                                     return 0;
                                 }
 
+                                // invalidate caches
+                                gdInvalidate(clanId);
+
                                 ctx.getSource().sendSuccess(() -> Component.literal("Clan home removed."), false);
                                 return 1;
                             })
                     )
-
-
-
 
                     /* ===================== LEAVE ===================== */
                     .then(Commands.literal("leave")
@@ -371,7 +388,6 @@ public class ClanCommand {
                                 var player = context.getSource().getPlayerOrException();
                                 UUID playerId = player.getUUID();
 
-                                // Track last-known name
                                 ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
 
                                 if (!ClanMembershipRegistry.isInClan(playerId)) {
@@ -386,7 +402,6 @@ public class ClanCommand {
                                     clan.removeMember(playerId);
                                     try {
                                         ClanDAO.saveMembers(clanId, buildMemberRanks(clan));
-
                                     } catch (SQLException e) {
                                         e.printStackTrace();
                                         context.getSource().sendFailure(Component.literal("Failed to save membership to database."));
@@ -396,6 +411,9 @@ public class ClanCommand {
 
                                 ClanMembershipRegistry.leaveClan(playerId);
                                 ClanRegistry.cleanupEmptyClans();
+
+                                // invalidate caches
+                                gdInvalidate(clanId, playerId);
 
                                 context.getSource().sendSuccess(
                                         () -> Component.literal("You have left your clan."),
@@ -444,6 +462,7 @@ public class ClanCommand {
                                         }
 
                                         UUID clanIdToDelete = clanToDelete.getId();
+                                        var affectedMembers = new ArrayList<>(clanToDelete.getMembers()); // cache invalidation support
 
                                         // Remove from alliance FIRST
                                         UUID allianceId = clanToDelete.getAllianceId();
@@ -477,6 +496,9 @@ public class ClanCommand {
 
                                         // Remove from registry (also clears tag index)
                                         ClanRegistry.removeClan(clanIdToDelete);
+
+                                        // invalidate caches
+                                        gdInvalidate(clanIdToDelete, affectedMembers.toArray(new UUID[0]));
 
                                         context.getSource().sendSuccess(
                                                 () -> Component.literal("Clan '" + clanToDelete.getName() + "' (tag: " + clanToDelete.getTag() + ") has been deleted."),
@@ -538,7 +560,6 @@ public class ClanCommand {
                                 var player = context.getSource().getPlayerOrException();
                                 UUID playerId = player.getUUID();
 
-                                // Track last-known name
                                 ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
 
                                 UUID clanId = ClanMembershipRegistry.getClan(playerId);
@@ -554,6 +575,8 @@ public class ClanCommand {
                                     context.getSource().sendFailure(Component.literal("Only the clan leader can disband the clan."));
                                     return 0;
                                 }
+
+                                var affectedMembers = new ArrayList<>(clan.getMembers()); // cache invalidation support
 
                                 // Remove from alliance
                                 UUID allianceId = clan.getAllianceId();
@@ -588,6 +611,9 @@ public class ClanCommand {
                                 // Remove from memory
                                 ClanRegistry.removeClan(clanId);
 
+                                // invalidate caches
+                                gdInvalidate(clanId, affectedMembers.toArray(new UUID[0]));
+
                                 context.getSource().sendSuccess(() ->
                                         Component.literal("Your clan '" + clan.getName() + "' (tag: " + clan.getTag() + ") has been disbanded."), false);
 
@@ -602,7 +628,6 @@ public class ClanCommand {
                                         var inviter = context.getSource().getPlayerOrException();
                                         UUID inviterId = inviter.getUUID();
 
-                                        // Track last-known name for inviter
                                         ClanMembershipRegistry.updateLastKnownName(inviterId, inviter.getName().getString());
 
                                         UUID clanId = ClanMembershipRegistry.getClan(inviterId);
@@ -629,7 +654,6 @@ public class ClanCommand {
 
                                         UUID targetId = targetProfile.getId();
 
-                                        // Store last-known name for target (helps GD/your UI for offline players)
                                         ClanMembershipRegistry.updateLastKnownName(targetId, targetProfile.getName());
 
                                         if (ClanMembershipRegistry.isInClan(targetId)) {
@@ -650,7 +674,6 @@ public class ClanCommand {
                                 var player = context.getSource().getPlayerOrException();
                                 UUID playerId = player.getUUID();
 
-                                // Track last-known name
                                 ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
 
                                 if (ClanMembershipRegistry.isInClan(playerId)) {
@@ -682,6 +705,9 @@ public class ClanCommand {
                                     return 0;
                                 }
 
+                                // invalidate caches
+                                gdInvalidate(invitedClanId, playerId);
+
                                 context.getSource().sendSuccess(() ->
                                         Component.literal("You have joined the clan: " + clan.getName() + " (tag: " + clan.getTag() + ")"), false);
 
@@ -694,7 +720,6 @@ public class ClanCommand {
                                 var player = context.getSource().getPlayerOrException();
                                 UUID playerId = player.getUUID();
 
-                                // Track last-known name
                                 ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
 
                                 UUID clanId = ClanMembershipRegistry.getClan(playerId);
@@ -729,7 +754,6 @@ public class ClanCommand {
                                                 var player = context.getSource().getPlayerOrException();
                                                 UUID playerId = player.getUUID();
 
-                                                // Track last-known name
                                                 ClanMembershipRegistry.updateLastKnownName(playerId, player.getName().getString());
 
                                                 Clan targetClan = findClanByTagOrName(oldKey);
@@ -743,7 +767,6 @@ public class ClanCommand {
                                                     return 0;
                                                 }
 
-                                                // Prevent duplicate DISPLAY names (tag is the stable identifier)
                                                 for (Clan c : ClanRegistry.getAllClans().values()) {
                                                     if (c.getName().equalsIgnoreCase(newName)) {
                                                         context.getSource().sendFailure(Component.literal("Another clan with that name already exists."));
@@ -762,6 +785,9 @@ public class ClanCommand {
                                                     return 0;
                                                 }
 
+                                                // invalidate caches
+                                                gdInvalidate(targetClan.getId());
+
                                                 context.getSource().sendSuccess(
                                                         () -> Component.literal("Clan '" + oldName + "' has been renamed to '" + newName + "'. (tag: " + targetClan.getTag() + ")"),
                                                         false
@@ -770,10 +796,5 @@ public class ClanCommand {
                                             }))))
             );
         });
-
-
     }
-
-
-
 }

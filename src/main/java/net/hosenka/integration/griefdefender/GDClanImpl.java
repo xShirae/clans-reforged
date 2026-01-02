@@ -124,23 +124,30 @@ public class GDClanImpl implements Clan {
         net.hosenka.util.CRDebug.log("[GD] alliance=" + alliance.getName()
                 + " clans=" + alliance.getClans());
 
+        var provider = com.griefdefender.api.GriefDefender.getCore().getClanProvider();
+        ClansReforgedClanProvider cr = (provider instanceof ClansReforgedClanProvider p) ? p : null;
+
         List<Clan> result = new ArrayList<>();
         for (UUID clanId : alliance.getClans()) {
             if (clanId.equals(source.getId())) continue;
 
-            var provider = com.griefdefender.api.GriefDefender.getCore().getClanProvider();
-            ClansReforgedClanProvider cr = (provider instanceof ClansReforgedClanProvider p) ? p : null;
-
-            var allied = ClanRegistry.getClan(clanId);
-            if (allied != null) {
-                Clan wrapped = (cr != null) ? cr.getClanById(clanId) : new GDClanImpl(allied);
-                if (wrapped != null) result.add(wrapped);
+            Clan wrapped;
+            if (cr != null) {
+                wrapped = cr.getClanById(clanId);
+            } else {
+                var allied = ClanRegistry.getClan(clanId);
+                wrapped = (allied != null) ? new GDClanImpl(allied) : null;
             }
 
+            if (wrapped != null) {
+                result.add(wrapped);
+            }
         }
+
         net.hosenka.util.CRDebug.log("[GD] getAllies() returning " + result.size() + " allies for clan=" + source.getTag());
         return result;
     }
+
 
 
     @Override

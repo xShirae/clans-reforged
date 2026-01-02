@@ -7,6 +7,8 @@ import net.hosenka.util.CRDebug;
 import net.minecraft.server.MinecraftServer;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.UUID;
+
 public final class GDIntegration {
 
     private GDIntegration() {}
@@ -15,34 +17,34 @@ public final class GDIntegration {
     private static boolean registered = false;
 
     public static void init(MinecraftServer server) {
-        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
-            return;
-        }
-        if (!FabricLoader.getInstance().isModLoaded("griefdefender")) {
-            return;
-        }
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) return;
+        if (!FabricLoader.getInstance().isModLoaded("griefdefender")) return;
 
-        CRDebug.log("GDIntegration.init() called");
+        ServerHolder.set(server);
+
+        // already registered? just refresh caches
+        if (registered) {
+            CRDebug.log("GDIntegration already registered; clearing caches.");
+            clearCachesIfPresent();
+            return;
+        }
 
         try {
-            ServerHolder.set(server);
-
-            // Register only once
-            if (!registered) {
-                clanProvider = new ClansReforgedClanProvider();
-                GriefDefender.getRegistry().registerClanProvider(clanProvider);
-                registered = true;
-                CRDebug.log("GD Clan provider registered successfully.");
-            } else {
-                CRDebug.log("GD Clan provider already registered (skipping).");
-            }
-
-        } catch (IllegalStateException e) {
-            // GD present but not ready
-            CRDebug.log("GD present but not initialized yet (IllegalStateException).", e);
+            clanProvider = new ClansReforgedClanProvider();
+            GriefDefender.getRegistry().registerClanProvider(clanProvider);
+            registered = true;
+            CRDebug.log("GD Clan provider registered successfully.");
         } catch (Throwable t) {
-            CRDebug.log("Unexpected error while initializing GD integration.", t);
+            // if GD isn’t ready even at SERVER_STARTED, you’ll see it here
+            CRDebug.log("Failed to register GD clan provider.", t);
         }
+    }
+
+    public static void shutdown() {
+        // We can’t “unregister” from GD safely, but we CAN drop references + caches.
+        clearCachesIfPresent();
+        ServerHolder.set(null);
+        CRDebug.log("GDIntegration shutdown: caches cleared, server cleared.");
     }
 
     public static @Nullable ClansReforgedClanProvider getClanProvider() {
@@ -54,9 +56,25 @@ public final class GDIntegration {
     }
 
     public static void clearCachesIfPresent() {
-        if (clanProvider != null) {
-            clanProvider.clearCaches();
-        }
+        if (clanProvider != null) clanProvider.clearCaches();
     }
 
+    // --------- Cache invalidation helpers (use everywhere you mutate clan data) ---------
+
+    public static void invalidateClan(UUID clanId) {
+        if (clanProvider != null) clanProvider.invalidateClan(clanId);
+    }
+
+    public static void invalidatePlayer(UUID playerId) {
+        if (clanProvider != null) clanProvider.invalidatePlayer(playerId);
+    }
+
+    public static void invalidateClanAndPlayers(UUID clanId, UUID... players) {
+        invalidateClan(clanId);
+        if (players != null) {
+            for (UUID p : players) {
+                if (p != null) invalidatePlayer(p);
+            }
+        }
+    }
 }
