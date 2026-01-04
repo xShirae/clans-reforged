@@ -3,6 +3,7 @@ package net.hosenka.integration.griefdefender;
 import com.griefdefender.api.GriefDefender;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
+import net.hosenka.api.ClansReforgedEvents;
 import net.hosenka.util.CRDebug;
 import net.minecraft.server.MinecraftServer;
 import org.jetbrains.annotations.Nullable;
@@ -15,6 +16,9 @@ public final class GDIntegration {
 
     private static ClansReforgedClanProvider clanProvider;
     private static boolean registered = false;
+
+    // Fabric events are global; we only want to hook them once.
+    private static boolean hooksRegistered = false;
 
     public static void init(MinecraftServer server) {
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) return;
@@ -37,7 +41,46 @@ public final class GDIntegration {
         } catch (Throwable t) {
             // if GD isn’t ready even at SERVER_STARTED, you’ll see it here
             CRDebug.log("Failed to register GD clan provider.", t);
+            return;
         }
+
+        // Hook CR events -> invalidate provider caches when CR mutates clan data.
+        registerEventHooks();
+    }
+
+    /**
+     * Hooks ClansReforgedEvents into GD provider cache invalidation.
+     *
+     * This mirrors what GDHooks does for Bukkit plugins (listen to clan events and update
+     * cached clan/player views). Without this, GD may keep stale wrappers after CR changes.
+     */
+    private static void registerEventHooks() {
+        if (hooksRegistered) return;
+        hooksRegistered = true;
+
+        // Clan created/disbanded
+        ClansReforgedEvents.CREATE_CLAN.register((creator, clanId) -> invalidateClanAndPlayers(clanId, creator.getUUID()));
+
+        ClansReforgedEvents.DISBAND_CLAN.register((actor, clanId) -> {
+            // We don't have the member list here reliably (clan may already be gone),
+            // so safest is to clear all caches.
+            clearCachesIfPresent();
+        });
+
+        // Membership changes
+        ClansReforgedEvents.PLAYER_JOINED_CLAN.register((player, clanId) -> invalidateClanAndPlayers(clanId, player.getUUID()));
+        ClansReforgedEvents.PLAYER_LEFT_CLAN.register((player, clanId) -> invalidateClanAndPlayers(clanId, player.getUUID()));
+        ClansReforgedEvents.PLAYER_KICKED_CLAN.register((actor, targetPlayerId, clanId) -> invalidateClanAndPlayers(clanId, targetPlayerId));
+
+        // Rank updates
+        ClansReforgedEvents.PLAYER_RANK_UPDATE.register((actor, targetPlayerId, clanId, oldRank, newRank) ->
+                invalidateClanAndPlayers(clanId, targetPlayerId));
+
+        // Homes affect GD clan home info
+        ClansReforgedEvents.PLAYER_HOME_SET.register((player, clanId, pos, yaw, pitch) -> {
+            invalidateClan(clanId);
+            return net.minecraft.world.InteractionResult.PASS;
+        });
     }
 
     public static void shutdown() {

@@ -19,8 +19,8 @@ import java.net.URL;
 
 
 public class ClansReforged implements ModInitializer {
-	public static final String MOD_ID = "clansreforged";
-	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    public static final String MOD_ID = "clansreforged";
+    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     @Override
     public void onInitialize() {
@@ -58,7 +58,7 @@ public class ClansReforged implements ModInitializer {
                 final var provider = net.hosenka.integration.griefdefender.GDIntegration.getClanProvider();
                 final boolean registered = net.hosenka.integration.griefdefender.GDIntegration.isRegistered();
 
-                if (registered && provider != null) {
+                if (registered && provider != null && !FabricLoader.getInstance().isModLoaded("gdhooks")) {
                     try {
                         net.hosenka.integration.griefdefender.CRGDClanCommands.register(server, provider);
 
@@ -66,6 +66,10 @@ public class ClansReforged implements ModInitializer {
                     } catch (Throwable t) {
                         LOGGER.error("Failed to inject Fabric GD clan commands", t);
                     }
+                } else if (registered && provider != null && FabricLoader.getInstance().isModLoaded("gdhooks")) {
+                    // GDHooks (Fabric) provides its own /gd clan command tree. Avoid registering duplicates.
+                    System.out.println("[ClansReforged] GDHooks detected; skipping built-in Fabric GD clan commands injection.");
+
                 } else {
                     System.out.println("[ClansReforged] GD not ready yet (provider not registered). Will retry once next tick.");
                 }
@@ -102,6 +106,16 @@ public class ClansReforged implements ModInitializer {
                 }
             }
         });
+
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
+                return;
+            }
+            if (FabricLoader.getInstance().isModLoaded("griefdefender")) {
+                net.hosenka.integration.griefdefender.GDIntegration.shutdown();
+            }
+        });
+
 
 
 

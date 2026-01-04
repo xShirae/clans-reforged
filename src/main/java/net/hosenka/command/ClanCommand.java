@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.hosenka.alliance.Alliance;
 import net.hosenka.alliance.AllianceRegistry;
+import net.hosenka.api.ClansReforgedEvents;
 import net.hosenka.clan.Clan;
 import net.hosenka.clan.ClanMembershipRegistry;
 import net.hosenka.clan.ClanRank;
@@ -12,12 +13,15 @@ import net.hosenka.clan.ClanRegistry;
 import net.hosenka.database.ClanDAO;
 import net.hosenka.integration.griefdefender.GDIntegration;
 import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.InteractionResult;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -116,6 +120,13 @@ public class ClanCommand {
                                             return 0;
                                         }
 
+                                        // EVENTS: PreCreateClan (cancellable)
+                                        InteractionResult pre = ClansReforgedEvents.PRE_CREATE_CLAN.invoker()
+                                                .onPreCreate(player, name, name);
+                                        if (pre == InteractionResult.FAIL) {
+                                            return 0;
+                                        }
+
                                         UUID clanId = ClanRegistry.createClan(name, playerId);
                                         Clan clan = ClanRegistry.getClan(clanId);
 
@@ -131,6 +142,9 @@ public class ClanCommand {
                                             context.getSource().sendFailure(Component.literal("Failed to save clan to database."));
                                             return 0;
                                         }
+
+                                        // EVENTS: CreateClan (post)
+                                        ClansReforgedEvents.CREATE_CLAN.invoker().onCreate(player, clanId);
 
                                         // invalidate caches
                                         gdInvalidate(clanId, playerId);
@@ -168,6 +182,13 @@ public class ClanCommand {
                                                     return 0;
                                                 }
 
+                                                // EVENTS: PreCreateClan (cancellable)
+                                                InteractionResult pre = ClansReforgedEvents.PRE_CREATE_CLAN.invoker()
+                                                        .onPreCreate(player, tag, name);
+                                                if (pre == InteractionResult.FAIL) {
+                                                    return 0;
+                                                }
+
                                                 UUID clanId;
                                                 try {
                                                     clanId = ClanRegistry.createClanWithTag(tag, name, playerId);
@@ -190,6 +211,9 @@ public class ClanCommand {
                                                     context.getSource().sendFailure(Component.literal("Failed to save clan to database."));
                                                     return 0;
                                                 }
+
+                                                // EVENTS: CreateClan (post)
+                                                ClansReforgedEvents.CREATE_CLAN.invoker().onCreate(player, clanId);
 
                                                 // invalidate caches
                                                 gdInvalidate(clanId, playerId);
@@ -234,6 +258,9 @@ public class ClanCommand {
                                             return 0;
                                         }
 
+                                        // EVENTS: PlayerJoinedClan (post)
+                                        ClansReforgedEvents.PLAYER_JOINED_CLAN.invoker().onJoin(player, targetClan.getId());
+
                                         // invalidate caches
                                         gdInvalidate(targetClan.getId(), playerId);
 
@@ -266,6 +293,14 @@ public class ClanCommand {
 
                                 if (!canManageHome(playerId, clan)) {
                                     ctx.getSource().sendFailure(Component.literal("You must be Leader or Right Arm to set the clan home."));
+                                    return 0;
+                                }
+
+                                // EVENTS: PlayerHomeSet (cancellable)
+                                GlobalPos pos = GlobalPos.of(player.serverLevel().dimension(), player.blockPosition());
+                                InteractionResult homeRes = ClansReforgedEvents.PLAYER_HOME_SET.invoker()
+                                        .onHomeSet(player, clanId, pos, player.getYRot(), player.getXRot());
+                                if (homeRes == InteractionResult.FAIL) {
                                     return 0;
                                 }
 
@@ -412,6 +447,9 @@ public class ClanCommand {
                                 ClanMembershipRegistry.leaveClan(playerId);
                                 ClanRegistry.cleanupEmptyClans();
 
+                                // EVENTS: PlayerLeftClan (post)
+                                ClansReforgedEvents.PLAYER_LEFT_CLAN.invoker().onLeave(player, clanId);
+
                                 // invalidate caches
                                 gdInvalidate(clanId, playerId);
 
@@ -496,6 +534,13 @@ public class ClanCommand {
 
                                         // Remove from registry (also clears tag index)
                                         ClanRegistry.removeClan(clanIdToDelete);
+
+                                        // EVENTS: DisbandClan (post) - actor may be null if command source isn't a player
+                                        ServerPlayer actor = null;
+                                        try {
+                                            actor = context.getSource().getPlayer();
+                                        } catch (Exception ignored) {}
+                                        ClansReforgedEvents.DISBAND_CLAN.invoker().onDisband(actor, clanIdToDelete);
 
                                         // invalidate caches
                                         gdInvalidate(clanIdToDelete, affectedMembers.toArray(new UUID[0]));
@@ -611,6 +656,9 @@ public class ClanCommand {
                                 // Remove from memory
                                 ClanRegistry.removeClan(clanId);
 
+                                // EVENTS: DisbandClan (post)
+                                ClansReforgedEvents.DISBAND_CLAN.invoker().onDisband(player, clanId);
+
                                 // invalidate caches
                                 gdInvalidate(clanId, affectedMembers.toArray(new UUID[0]));
 
@@ -704,6 +752,9 @@ public class ClanCommand {
                                     context.getSource().sendFailure(Component.literal("Failed to save membership to database."));
                                     return 0;
                                 }
+
+                                // EVENTS: PlayerJoinedClan (post)
+                                ClansReforgedEvents.PLAYER_JOINED_CLAN.invoker().onJoin(player, invitedClanId);
 
                                 // invalidate caches
                                 gdInvalidate(invitedClanId, playerId);
