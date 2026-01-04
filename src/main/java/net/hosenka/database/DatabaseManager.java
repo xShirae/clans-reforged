@@ -63,6 +63,19 @@ public class DatabaseManager {
         );
     """);
 
+
+                // --- Schema upgrades (safe) ---
+                stmt.execute("ALTER TABLE alliances ADD COLUMN IF NOT EXISTS leader_clan UUID");
+
+                stmt.execute("""
+        CREATE TABLE IF NOT EXISTS alliance_wars (
+            a UUID NOT NULL,
+            b UUID NOT NULL,
+            PRIMARY KEY (a, b),
+            FOREIGN KEY (a) REFERENCES alliances(id) ON DELETE CASCADE,
+            FOREIGN KEY (b) REFERENCES alliances(id) ON DELETE CASCADE
+        );
+    """);
                 stmt.execute("""
         CREATE TABLE IF NOT EXISTS alliance_clans (
             clan UUID PRIMARY KEY,

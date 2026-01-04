@@ -243,7 +243,18 @@ public class GDClanImpl implements Clan {
 
     @Override
     public boolean isRival(String tag) {
-        return false;
+        if (tag == null || tag.isBlank()) return false;
+        UUID myAllianceId = source.getAllianceId();
+        if (myAllianceId == null) return false; // no alliance => neutral to everyone
+
+        net.hosenka.clan.Clan other = ClanRegistry.getByTag(tag);
+        if (other == null) other = ClanRegistry.getByName(tag);
+        if (other == null) return false;
+        UUID otherAllianceId = other.getAllianceId();
+        if (otherAllianceId == null) return false; // no alliance => neutral
+        if (myAllianceId.equals(otherAllianceId)) return false; // same alliance => ally
+
+        return net.hosenka.alliance.AllianceRegistry.areAlliancesAtWar(myAllianceId, otherAllianceId);
     }
 
     @Override

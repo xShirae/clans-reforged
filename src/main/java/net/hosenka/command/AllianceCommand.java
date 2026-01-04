@@ -19,7 +19,7 @@ import java.util.UUID;
 public class AllianceCommand {
 
     /**
-     * Invalidates GD clan provider caches for clans whose ally list may have changed.
+     * Invalidates GD clan provider caches for clans whose ally/rival list may have changed.
      * Safe to call even if GriefDefender isn't installed/initialized.
      */
     private static void gdInvalidateAllies(UUID... clanIds) {
@@ -31,285 +31,604 @@ public class AllianceCommand {
         }
     }
 
+    private static Map.Entry<UUID, Alliance> findAllianceByName(String name) {
+        for (Map.Entry<UUID, Alliance> entry : AllianceRegistry.getAllAlliances().entrySet()) {
+            if (entry.getValue().getName().equalsIgnoreCase(name)) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    private static boolean hasAllianceLeaderPermission(net.minecraft.commands.CommandSourceStack source,
+                                                       UUID playerId,
+                                                       UUID clanId,
+                                                       Clan clan,
+                                                       Alliance alliance) {
+        if (source.hasPermission(2)) return true; // OP override
+        UUID leaderClanId = alliance.getLeaderClanId();
+        return leaderClanId != null && leaderClanId.equals(clanId) && clan.isLeader(playerId);
+    }
+
     public static void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            dispatcher.register(Commands.literal("alliance")
 
-                    // /alliance create <name>
-                    .then(Commands.literal("create")
-                            .then(Commands.argument("name", StringArgumentType.string())
-                                    .executes(context -> {
-                                        if (!context.getSource().hasPermission(2)) {
-                                            context.getSource().sendFailure(Component.literal("You do not have permission to create alliances."));
-                                            return 0;
-                                        }
+            var root = Commands.literal("alliance");
 
-                                        String name = StringArgumentType.getString(context, "name");
-                                        UUID id = AllianceRegistry.createAlliance(name);
-                                        Alliance alliance = AllianceRegistry.getAlliance(id);
+            // /alliance create <name>
+            var create = Commands.literal("create");
+            create.then(Commands.argument("name", StringArgumentType.string())
+                    .executes(context -> {
+                        if (!context.getSource().hasPermission(2)) {
+                            context.getSource().sendFailure(Component.literal("You do not have permission to create alliances."));
+                            return 0;
+                        }
 
-                                        try {
-                                            AllianceDAO.saveAlliance(id, alliance);
-                                        } catch (SQLException e) {
-                                            e.printStackTrace();
-                                            context.getSource().sendFailure(Component.literal("Failed to save alliance to database."));
-                                            return 0;
-                                        }
+                        String name = StringArgumentType.getString(context, "name");
+                        UUID id = AllianceRegistry.createAlliance(name);
+                        Alliance alliance = AllianceRegistry.getAlliance(id);
 
-                                        context.getSource().sendSuccess(() ->  Component.literal("Alliance created: " + name), false);
-                                        return 1;
-                                    })))
+                        try {
+                            AllianceDAO.saveAlliance(id, alliance);
+                        } catch (SQLException e) {
+                            e.printStackTrace();
+                            context.getSource().sendFailure(Component.literal("Failed to save alliance to database."));
+                            return 0;
+                        }
 
-                    // /alliance delete <name>
-                    .then(Commands.literal("delete")
-                            .then(Commands.argument("name", StringArgumentType.string())
-                                    .executes(context -> {
-                                        if (!context.getSource().hasPermission(2)) {
-                                            context.getSource().sendFailure(Component.literal("You do not have permission to delete alliances."));
-                                            return 0;
-                                        }
+                        context.getSource().sendSuccess(() -> Component.literal("Alliance created: " + name), false);
+                        return 1;
+                    }));
+            root.then(create);
 
-                                        String name = StringArgumentType.getString(context, "name");
-                                        UUID toDelete = null;
+            // /alliance delete <name>
+            var delete = Commands.literal("delete");
+            delete.then(Commands.argument("name", StringArgumentType.string())
+                    .executes(context -> {
+                        if (!context.getSource().hasPermission(2)) {
+                            context.getSource().sendFailure(Component.literal("You do not have permission to delete alliances."));
+                            return 0;
+                        }
 
-                                        for (Map.Entry<UUID, Alliance> entry : AllianceRegistry.getAllAlliances().entrySet()) {
-                                            if (entry.getValue().getName().equalsIgnoreCase(name)) {
-                                                toDelete = entry.getKey();
-                                                break;
-                                            }
-                                        }
+                        String name = StringArgumentType.getString(context, "name");
+                        Map.Entry<UUID, Alliance> entry = findAllianceByName(name);
+                        if (entry == null) {
+                            context.getSource().sendFailure(Component.literal("Alliance '" + name + "' not found."));
+                            return 0;
+                        }
 
-                                        if (toDelete == null) {
-                                            context.getSource().sendFailure(Component.literal("Alliance '" + name + "' not found."));
-                                            return 0;
-                                        }
+                        UUID toDelete = entry.getKey();
+                        Alliance deleted = entry.getValue();
 
-                                        Alliance deleted = AllianceRegistry.getAlliance(toDelete);
-                                        for (UUID clanId : deleted.getClans()) {
-                                            Clan clan = ClanRegistry.getClan(clanId);
-                                            if (clan != null) {
-                                                clan.setAllianceId(null);
-                                            }
+                        for (UUID clanId : deleted.getClans()) {
+                            Clan clan = ClanRegistry.getClan(clanId);
+                            if (clan != null) {
+                                clan.setAllianceId(null);
+                            }
+                        }
 
-                                        }
+                        gdInvalidateAllies(deleted.getClans().toArray(new UUID[0]));
 
-                                        gdInvalidateAllies(deleted.getClans().toArray(new UUID[0]));
+                        try {
+                            AllianceDAO.deleteAlliance(toDelete);
+                        } catch (SQLException e) {
+                            e.printStackTrace();
+                        }
 
-                                        try {
-                                            AllianceDAO.deleteAlliance(toDelete);
-                                        } catch (SQLException e) {
-                                            e.printStackTrace();
-                                        }
+                        AllianceRegistry.deleteAlliance(toDelete);
 
-                                        AllianceRegistry.deleteAlliance(toDelete);
+                        context.getSource().sendSuccess(() -> Component.literal("Alliance '" + name + "' has been deleted."), false);
+                        return 1;
+                    }));
+            root.then(delete);
 
-                                        context.getSource().sendSuccess(() ->  Component.literal("Alliance '" + name + "' has been deleted."), false);
-                                        return 1;
-                                    })))
+            // /alliance join <name>
+            var join = Commands.literal("join");
+            join.then(Commands.argument("name", StringArgumentType.string())
+                    .executes(context -> {
+                        UUID playerId = context.getSource().getPlayerOrException().getUUID();
+                        if (!ClanMembershipRegistry.isInClan(playerId)) {
+                            context.getSource().sendFailure(Component.literal("You must be in a clan to join an alliance."));
+                            return 0;
+                        }
 
-                    // /alliance join <name>
-                    .then(Commands.literal("join")
-                            .then(Commands.argument("name", StringArgumentType.string())
-                                    .executes(context -> {
-                                        UUID playerId = context.getSource().getPlayerOrException().getUUID();
-                                        if (!ClanMembershipRegistry.isInClan(playerId)) {
-                                            context.getSource().sendFailure(Component.literal("You must be in a clan to join an alliance."));
-                                            return 0;
-                                        }
+                        UUID clanId = ClanMembershipRegistry.getClan(playerId);
+                        Clan clan = ClanRegistry.getClan(clanId);
+                        if (clan == null) {
+                            context.getSource().sendFailure(Component.literal("Clan not found."));
+                            return 0;
+                        }
 
-                                        String name = StringArgumentType.getString(context, "name");
-                                        UUID clanId = ClanMembershipRegistry.getClan(playerId);
-                                        Clan clan = ClanRegistry.getClan(clanId);
+                        if (clan.getAllianceId() != null) {
+                            context.getSource().sendFailure(Component.literal("Your clan is already in an alliance."));
+                            return 0;
+                        }
 
-                                        if (clan == null) {
-                                            context.getSource().sendFailure(Component.literal("Clan not found."));
-                                            return 0;
-                                        }
+                        String name = StringArgumentType.getString(context, "name");
+                        Map.Entry<UUID, Alliance> entry = findAllianceByName(name);
+                        if (entry == null) {
+                            context.getSource().sendFailure(Component.literal("Alliance '" + name + "' not found."));
+                            return 0;
+                        }
 
-                                        if (clan.getAllianceId() != null) {
-                                            context.getSource().sendFailure(Component.literal("Your clan is already in an alliance."));
-                                            return 0;
-                                        }
+                        UUID allianceId = entry.getKey();
+                        Alliance target = entry.getValue();
 
-                                        Alliance target = null;
-                                        UUID allianceId = null;
+                        target.addClan(clanId);
+                        clan.setAllianceId(allianceId);
 
-                                        for (Map.Entry<UUID, Alliance> entry : AllianceRegistry.getAllAlliances().entrySet()) {
-                                            if (entry.getValue().getName().equalsIgnoreCase(name)) {
-                                                target = entry.getValue();
-                                                allianceId = entry.getKey();
-                                                break;
-                                            }
-                                        }
+                        // If the alliance doesn't have a leader clan yet, assign the first joining clan.
+                        if (target.getLeaderClanId() == null) {
+                            target.setLeaderClanId(clanId);
+                        }
 
-                                        if (target == null) {
-                                            context.getSource().sendFailure(Component.literal("Alliance '" + name + "' not found."));
-                                            return 0;
-                                        }
+                        gdInvalidateAllies(target.getClans().toArray(new UUID[0]));
 
-                                        target.addClan(clanId);
-                                        clan.setAllianceId(allianceId);
-                                        gdInvalidateAllies(target.getClans().toArray(new UUID[0]));
+                        try {
+                            AllianceDAO.saveAlliance(allianceId, target);
+                        } catch (SQLException e) {
+                            e.printStackTrace();
+                        }
 
-                                        try {
-                                            AllianceDAO.saveAlliance(allianceId, target);
-                                        } catch (SQLException e) {
-                                            e.printStackTrace();
-                                        }
+                        context.getSource().sendSuccess(() -> Component.literal("Your clan has joined the alliance: " + name), false);
+                        return 1;
+                    }));
+            root.then(join);
 
-                                        context.getSource().sendSuccess(() ->  Component.literal("Your clan has joined the alliance: " + name), false);
-                                        return 1;
-                                    })))
+            // /alliance leave
+            var leave = Commands.literal("leave");
+            leave.executes(context -> {
+                UUID playerId = context.getSource().getPlayerOrException().getUUID();
+                if (!ClanMembershipRegistry.isInClan(playerId)) {
+                    context.getSource().sendFailure(Component.literal("You must be in a clan to leave an alliance."));
+                    return 0;
+                }
 
-                    // /alliance leave
-                    .then(Commands.literal("leave")
-                            .executes(context -> {
-                                UUID playerId = context.getSource().getPlayerOrException().getUUID();
-                                if (!ClanMembershipRegistry.isInClan(playerId)) {
-                                    context.getSource().sendFailure(Component.literal("You must be in a clan to leave an alliance."));
-                                    return 0;
-                                }
+                UUID clanId = ClanMembershipRegistry.getClan(playerId);
+                Clan clan = ClanRegistry.getClan(clanId);
 
-                                UUID clanId = ClanMembershipRegistry.getClan(playerId);
-                                Clan clan = ClanRegistry.getClan(clanId);
+                if (clan == null || clan.getAllianceId() == null) {
+                    context.getSource().sendFailure(Component.literal("Your clan is not in an alliance."));
+                    return 0;
+                }
 
-                                if (clan == null || clan.getAllianceId() == null) {
-                                    context.getSource().sendFailure(Component.literal("Your clan is not in an alliance."));
-                                    return 0;
-                                }
+                UUID allianceId = clan.getAllianceId();
+                Alliance alliance = AllianceRegistry.getAlliance(allianceId);
 
-                                Alliance alliance = AllianceRegistry.getAlliance(clan.getAllianceId());
-                                if (alliance != null) {
-                                    alliance.removeClan(clanId);
-                                    try {
-                                        AllianceDAO.saveAlliance(clan.getAllianceId(), alliance);
-                                    } catch (SQLException e) {
-                                        e.printStackTrace();
+                if (alliance != null) {
+                    alliance.removeClan(clanId);
+
+                    // If the leaving clan was the leader clan, rotate leadership to any remaining clan.
+                    if (alliance.getLeaderClanId() == null) {
+                        UUID nextLeader = alliance.getClans().stream().findFirst().orElse(null);
+                        alliance.setLeaderClanId(nextLeader);
+                    }
+
+                    try {
+                        AllianceDAO.saveAlliance(allianceId, alliance);
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                clan.setAllianceId(null);
+
+                if (alliance != null) gdInvalidateAllies(alliance.getClans().toArray(new UUID[0]));
+                gdInvalidateAllies(clanId);
+
+                context.getSource().sendSuccess(() -> Component.literal("Your clan has left its alliance."), false);
+                return 1;
+            });
+            root.then(leave);
+
+            /* ===================== WAR ===================== */
+
+            // /alliance war <name>
+            var war = Commands.literal("war");
+            war.then(Commands.argument("name", StringArgumentType.string())
+                    .executes(context -> {
+                        var player = context.getSource().getPlayerOrException();
+                        UUID playerId = player.getUUID();
+
+                        if (!ClanMembershipRegistry.isInClan(playerId)) {
+                            context.getSource().sendFailure(Component.literal("You must be in a clan to declare war."));
+                            return 0;
+                        }
+
+                        UUID clanId = ClanMembershipRegistry.getClan(playerId);
+                        Clan clan = ClanRegistry.getClan(clanId);
+                        if (clan == null || clan.getAllianceId() == null) {
+                            context.getSource().sendFailure(Component.literal("Your clan is not in an alliance."));
+                            return 0;
+                        }
+
+                        UUID myAllianceId = clan.getAllianceId();
+                        Alliance myAlliance = AllianceRegistry.getAlliance(myAllianceId);
+                        if (myAlliance == null) {
+                            context.getSource().sendFailure(Component.literal("Alliance not found."));
+                            return 0;
+                        }
+
+                        if (!hasAllianceLeaderPermission(context.getSource(), playerId, clanId, clan, myAlliance)) {
+                            context.getSource().sendFailure(Component.literal("Only the alliance leader can declare war."));
+                            return 0;
+                        }
+
+                        String name = StringArgumentType.getString(context, "name");
+                        Map.Entry<UUID, Alliance> targetEntry = findAllianceByName(name);
+                        if (targetEntry == null) {
+                            context.getSource().sendFailure(Component.literal("Alliance '" + name + "' not found."));
+                            return 0;
+                        }
+
+                        UUID targetAllianceId = targetEntry.getKey();
+                        Alliance targetAlliance = targetEntry.getValue();
+
+                        if (targetAllianceId.equals(myAllianceId)) {
+                            context.getSource().sendFailure(Component.literal("You cannot declare war on your own alliance."));
+                            return 0;
+                        }
+
+                        if (AllianceRegistry.areAlliancesAtWar(myAllianceId, targetAllianceId)) {
+                            context.getSource().sendFailure(Component.literal("Your alliance is already at war with '" + targetAlliance.getName() + "'."));
+                            return 0;
+                        }
+
+                        try {
+                            AllianceRegistry.declareWar(myAllianceId, targetAllianceId);
+                        } catch (SQLException e) {
+                            e.printStackTrace();
+                            context.getSource().sendFailure(Component.literal("Failed to declare war due to a database error."));
+                            return 0;
+                        }
+
+                        gdInvalidateAllies(myAlliance.getClans().toArray(new UUID[0]));
+                        gdInvalidateAllies(targetAlliance.getClans().toArray(new UUID[0]));
+
+                        context.getSource().sendSuccess(() -> Component.literal(
+                                "War declared between '" + myAlliance.getName() + "' and '" + targetAlliance.getName() + "'."
+                        ), false);
+
+                        return 1;
+                    }));
+            root.then(war);
+
+            /* ===================== PEACE REQUESTS ===================== */
+
+            // /alliance peace <name>  (send request)
+            // /alliance peace accept <name>
+            // /alliance peace deny <name>
+            var peace = Commands.literal("peace");
+
+            // send peace request
+            peace.then(Commands.argument("name", StringArgumentType.string())
+                    .executes(context -> {
+                        var player = context.getSource().getPlayerOrException();
+                        UUID playerId = player.getUUID();
+
+                        if (!ClanMembershipRegistry.isInClan(playerId)) {
+                            context.getSource().sendFailure(Component.literal("You must be in a clan to request peace."));
+                            return 0;
+                        }
+
+                        UUID clanId = ClanMembershipRegistry.getClan(playerId);
+                        Clan clan = ClanRegistry.getClan(clanId);
+                        if (clan == null || clan.getAllianceId() == null) {
+                            context.getSource().sendFailure(Component.literal("Your clan is not in an alliance."));
+                            return 0;
+                        }
+
+                        UUID myAllianceId = clan.getAllianceId();
+                        Alliance myAlliance = AllianceRegistry.getAlliance(myAllianceId);
+                        if (myAlliance == null) {
+                            context.getSource().sendFailure(Component.literal("Alliance not found."));
+                            return 0;
+                        }
+
+                        if (!hasAllianceLeaderPermission(context.getSource(), playerId, clanId, clan, myAlliance)) {
+                            context.getSource().sendFailure(Component.literal("Only the alliance leader can request peace."));
+                            return 0;
+                        }
+
+                        String name = StringArgumentType.getString(context, "name");
+                        Map.Entry<UUID, Alliance> targetEntry = findAllianceByName(name);
+                        if (targetEntry == null) {
+                            context.getSource().sendFailure(Component.literal("Alliance '" + name + "' not found."));
+                            return 0;
+                        }
+
+                        UUID targetAllianceId = targetEntry.getKey();
+                        Alliance targetAlliance = targetEntry.getValue();
+
+                        if (targetAllianceId.equals(myAllianceId)) {
+                            context.getSource().sendFailure(Component.literal("You cannot request peace with your own alliance."));
+                            return 0;
+                        }
+
+                        if (!AllianceRegistry.areAlliancesAtWar(myAllianceId, targetAllianceId)) {
+                            context.getSource().sendFailure(Component.literal("Your alliance is not at war with '" + targetAlliance.getName() + "'."));
+                            return 0;
+                        }
+
+                        boolean created = AllianceRegistry.requestPeace(myAllianceId, targetAllianceId, playerId);
+                        if (!created) {
+                            context.getSource().sendFailure(Component.literal("A peace request is already pending (or could not be created)."));
+                            return 0;
+                        }
+
+                        // Notify target alliance leader if online
+                        UUID leaderClan = targetAlliance.getLeaderClanId();
+                        if (leaderClan != null) {
+                            Clan leaderClanObj = ClanRegistry.getClan(leaderClan);
+                            if (leaderClanObj != null) {
+                                UUID leaderPlayer = leaderClanObj.getLeaderId();
+                                if (leaderPlayer != null) {
+                                    var onlineLeader = context.getSource().getServer().getPlayerList().getPlayer(leaderPlayer);
+                                    if (onlineLeader != null) {
+                                        onlineLeader.sendSystemMessage(Component.literal(
+                                                "Peace request received from alliance '" + myAlliance.getName() + "'. " +
+                                                        "Use /alliance peace accept " + myAlliance.getName() +
+                                                        " or /alliance peace deny " + myAlliance.getName() + "."
+                                        ));
                                     }
                                 }
+                            }
+                        }
 
-                                clan.setAllianceId(null);
-                                if (alliance != null) gdInvalidateAllies(alliance.getClans().toArray(new UUID[0]));
-                                gdInvalidateAllies(clanId);
+                        context.getSource().sendSuccess(() -> Component.literal(
+                                "Peace request sent to '" + targetAlliance.getName() + "'."
+                        ), false);
 
-                                context.getSource().sendSuccess(() ->  Component.literal("Your clan has left its alliance."), false);
-                                return 1;
-                            }))
+                        return 1;
+                    }));
 
-                    // /alliance info <name>
-                    .then(Commands.literal("info")
-                            .then(Commands.argument("name", StringArgumentType.string())
-                                    .executes(context -> {
-                                        String name = StringArgumentType.getString(context, "name");
+            // accept peace request
+            var accept = Commands.literal("accept");
+            accept.then(Commands.argument("name", StringArgumentType.string())
+                    .executes(context -> {
+                        var player = context.getSource().getPlayerOrException();
+                        UUID playerId = player.getUUID();
 
-                                        Alliance alliance = null;
-                                        for (Alliance a : AllianceRegistry.getAllAlliances().values()) {
-                                            if (a.getName().equalsIgnoreCase(name)) {
-                                                alliance = a;
-                                                break;
-                                            }
-                                        }
+                        if (!ClanMembershipRegistry.isInClan(playerId)) {
+                            context.getSource().sendFailure(Component.literal("You must be in a clan to accept peace."));
+                            return 0;
+                        }
 
-                                        if (alliance == null) {
-                                            context.getSource().sendFailure(Component.literal("Alliance '" + name + "' not found."));
-                                            return 0;
-                                        }
+                        UUID clanId = ClanMembershipRegistry.getClan(playerId);
+                        Clan clan = ClanRegistry.getClan(clanId);
+                        if (clan == null || clan.getAllianceId() == null) {
+                            context.getSource().sendFailure(Component.literal("Your clan is not in an alliance."));
+                            return 0;
+                        }
 
-                                        StringBuilder sb = new StringBuilder();
-                                        sb.append("§6Alliance Info: ").append(alliance.getName()).append("\n");
-                                        sb.append("§7Clans (").append(alliance.getClans().size()).append("):\n");
+                        UUID myAllianceId = clan.getAllianceId();
+                        Alliance myAlliance = AllianceRegistry.getAlliance(myAllianceId);
+                        if (myAlliance == null) {
+                            context.getSource().sendFailure(Component.literal("Alliance not found."));
+                            return 0;
+                        }
 
-                                        for (UUID clanId : alliance.getClans()) {
-                                            Clan clan = ClanRegistry.getClan(clanId);
-                                            if (clan != null) {
-                                                sb.append("- ").append(clan.getName()).append("\n");
-                                            } else {
-                                                sb.append("- Unknown Clan (").append(clanId).append(")\n");
-                                            }
-                                        }
+                        if (!hasAllianceLeaderPermission(context.getSource(), playerId, clanId, clan, myAlliance)) {
+                            context.getSource().sendFailure(Component.literal("Only the alliance leader can accept peace."));
+                            return 0;
+                        }
 
-                                        context.getSource().sendSuccess(() ->  Component.literal(sb.toString().trim()), false);
-                                        return 1;
-                                    }))
-                    )
+                        String name = StringArgumentType.getString(context, "name");
+                        Map.Entry<UUID, Alliance> otherEntry = findAllianceByName(name);
+                        if (otherEntry == null) {
+                            context.getSource().sendFailure(Component.literal("Alliance '" + name + "' not found."));
+                            return 0;
+                        }
 
-                    // /alliance list
-                    .then(Commands.literal("list")
-                            .executes(context -> {
-                                var allAlliances = AllianceRegistry.getAllAlliances();
+                        UUID otherAllianceId = otherEntry.getKey();
+                        Alliance otherAlliance = otherEntry.getValue();
 
-                                if (allAlliances.isEmpty()) {
-                                    context.getSource().sendSuccess(
-                                            () ->  Component.literal("No alliances have been created yet."),
-                                            false
-                                    );
-                                    return 1;
+                        try {
+                            var req = AllianceRegistry.getPeaceRequest(otherAllianceId, myAllianceId);
+                            boolean acceptedOk = AllianceRegistry.acceptPeace(myAllianceId, otherAllianceId);
+                            if (!acceptedOk || req == null) {
+                                context.getSource().sendFailure(Component.literal("No pending peace request from '" + otherAlliance.getName() + "'."));
+                                return 0;
+                            }
+
+                            if (req.requester() != null) {
+                                var requesterPlayer = context.getSource().getServer().getPlayerList().getPlayer(req.requester());
+                                if (requesterPlayer != null) {
+                                    requesterPlayer.sendSystemMessage(Component.literal(
+                                            "Your peace request to '" + myAlliance.getName() + "' was accepted."
+                                    ));
                                 }
+                            }
+                        } catch (SQLException e) {
+                            e.printStackTrace();
+                            context.getSource().sendFailure(Component.literal("Failed to accept peace due to a database error."));
+                            return 0;
+                        }
 
-                                StringBuilder sb = new StringBuilder("Existing alliances:\n");
-                                for (Alliance alliance : allAlliances.values()) {
-                                    sb.append("- ").append(alliance.getName())
-                                            .append(" (").append(alliance.getClans().size()).append(" clans)\n");
-                                }
+                        gdInvalidateAllies(myAlliance.getClans().toArray(new UUID[0]));
+                        gdInvalidateAllies(otherAlliance.getClans().toArray(new UUID[0]));
 
-                                context.getSource().sendSuccess(
-                                        () ->  Component.literal(sb.toString().trim()),
-                                        false
-                                );
-                                return 1;
-                            })
-                    )
+                        context.getSource().sendSuccess(() -> Component.literal(
+                                "Peace accepted between '" + myAlliance.getName() + "' and '" + otherAlliance.getName() + "'."
+                        ), false);
 
-                    // /alliance rename <old> <new>
-                    .then(Commands.literal("rename")
-                            .then(Commands.argument("old", StringArgumentType.string())
-                                    .then(Commands.argument("new", StringArgumentType.string())
-                                            .executes(context -> {
-                                                if (!context.getSource().hasPermission(2)) {
-                                                    context.getSource().sendFailure(Component.literal("You do not have permission to rename alliances."));
-                                                    return 0;
-                                                }
+                        return 1;
+                    }));
+            peace.then(accept);
 
-                                                String oldName = StringArgumentType.getString(context, "old");
-                                                String newName = StringArgumentType.getString(context, "new");
+            // deny peace request
+            var deny = Commands.literal("deny");
+            deny.then(Commands.argument("name", StringArgumentType.string())
+                    .executes(context -> {
+                        var player = context.getSource().getPlayerOrException();
+                        UUID playerId = player.getUUID();
 
-                                                UUID idToRename = null;
-                                                Alliance target = null;
+                        if (!ClanMembershipRegistry.isInClan(playerId)) {
+                            context.getSource().sendFailure(Component.literal("You must be in a clan to deny peace."));
+                            return 0;
+                        }
 
-                                                for (Map.Entry<UUID, Alliance> entry : AllianceRegistry.getAllAlliances().entrySet()) {
-                                                    if (entry.getValue().getName().equalsIgnoreCase(oldName)) {
-                                                        idToRename = entry.getKey();
-                                                        target = entry.getValue();
-                                                        break;
-                                                    }
-                                                }
+                        UUID clanId = ClanMembershipRegistry.getClan(playerId);
+                        Clan clan = ClanRegistry.getClan(clanId);
+                        if (clan == null || clan.getAllianceId() == null) {
+                            context.getSource().sendFailure(Component.literal("Your clan is not in an alliance."));
+                            return 0;
+                        }
 
-                                                if (target == null || idToRename == null) {
-                                                    context.getSource().sendFailure(Component.literal("Alliance '" + oldName + "' not found."));
-                                                    return 0;
-                                                }
+                        UUID myAllianceId = clan.getAllianceId();
+                        Alliance myAlliance = AllianceRegistry.getAlliance(myAllianceId);
+                        if (myAlliance == null) {
+                            context.getSource().sendFailure(Component.literal("Alliance not found."));
+                            return 0;
+                        }
 
-                                                // Check name collision
-                                                for (Alliance alliance : AllianceRegistry.getAllAlliances().values()) {
-                                                    if (alliance.getName().equalsIgnoreCase(newName)) {
-                                                        context.getSource().sendFailure(Component.literal("Another alliance with that name already exists."));
-                                                        return 0;
-                                                    }
-                                                }
+                        if (!hasAllianceLeaderPermission(context.getSource(), playerId, clanId, clan, myAlliance)) {
+                            context.getSource().sendFailure(Component.literal("Only the alliance leader can deny peace."));
+                            return 0;
+                        }
 
-                                                target.setName(newName);
+                        String name = StringArgumentType.getString(context, "name");
+                        Map.Entry<UUID, Alliance> otherEntry = findAllianceByName(name);
+                        if (otherEntry == null) {
+                            context.getSource().sendFailure(Component.literal("Alliance '" + name + "' not found."));
+                            return 0;
+                        }
 
-                                                try {
-                                                    AllianceDAO.saveAlliance(idToRename, target);
-                                                } catch (SQLException e) {
-                                                    e.printStackTrace();
-                                                }
+                        UUID otherAllianceId = otherEntry.getKey();
+                        Alliance otherAlliance = otherEntry.getValue();
 
-                                                context.getSource().sendSuccess(() ->
-                                                        Component.literal("Alliance '" + oldName + "' has been renamed to '" + newName + "'."), false);
-                                                return 1;
-                                            }))))
-            );
+                        var req = AllianceRegistry.getPeaceRequest(otherAllianceId, myAllianceId);
+                        boolean deniedOk = AllianceRegistry.denyPeace(myAllianceId, otherAllianceId);
+                        if (!deniedOk || req == null) {
+                            context.getSource().sendFailure(Component.literal("No pending peace request from '" + otherAlliance.getName() + "'."));
+                            return 0;
+                        }
+
+                        if (req.requester() != null) {
+                            var requesterPlayer = context.getSource().getServer().getPlayerList().getPlayer(req.requester());
+                            if (requesterPlayer != null) {
+                                requesterPlayer.sendSystemMessage(Component.literal(
+                                        "Your peace request to '" + myAlliance.getName() + "' was denied."
+                                ));
+                            }
+                        }
+
+                        context.getSource().sendSuccess(() -> Component.literal(
+                                "Peace request denied (from '" + otherAlliance.getName() + "')."
+                        ), false);
+
+                        return 1;
+                    }));
+            peace.then(deny);
+
+            root.then(peace);
+
+            // /alliance info <name>
+            var info = Commands.literal("info");
+            info.then(Commands.argument("name", StringArgumentType.string())
+                    .executes(context -> {
+                        String name = StringArgumentType.getString(context, "name");
+
+                        Alliance alliance = null;
+                        for (Alliance a : AllianceRegistry.getAllAlliances().values()) {
+                            if (a.getName().equalsIgnoreCase(name)) {
+                                alliance = a;
+                                break;
+                            }
+                        }
+
+                        if (alliance == null) {
+                            context.getSource().sendFailure(Component.literal("Alliance '" + name + "' not found."));
+                            return 0;
+                        }
+
+                        StringBuilder sb = new StringBuilder();
+                        sb.append("§6Alliance Info: ").append(alliance.getName()).append("\n");
+                        sb.append("§7Clans (").append(alliance.getClans().size()).append("):\n");
+
+                        for (UUID clanId : alliance.getClans()) {
+                            Clan clan = ClanRegistry.getClan(clanId);
+                            if (clan != null) {
+                                sb.append("- ").append(clan.getName()).append("\n");
+                            } else {
+                                sb.append("- Unknown Clan (").append(clanId).append(")\n");
+                            }
+                        }
+
+                        context.getSource().sendSuccess(() -> Component.literal(sb.toString().trim()), false);
+                        return 1;
+                    }));
+            root.then(info);
+
+            // /alliance list
+            var list = Commands.literal("list");
+            list.executes(context -> {
+                var allAlliances = AllianceRegistry.getAllAlliances();
+
+                if (allAlliances.isEmpty()) {
+                    context.getSource().sendSuccess(() -> Component.literal("No alliances have been created yet."), false);
+                    return 1;
+                }
+
+                StringBuilder sb = new StringBuilder("Existing alliances:\n");
+                for (Alliance alliance : allAlliances.values()) {
+                    sb.append("- ").append(alliance.getName())
+                            .append(" (").append(alliance.getClans().size()).append(" clans)\n");
+                }
+
+                context.getSource().sendSuccess(() -> Component.literal(sb.toString().trim()), false);
+                return 1;
+            });
+            root.then(list);
+
+            // /alliance rename <old> <new>
+            var rename = Commands.literal("rename");
+            var oldArg = Commands.argument("old", StringArgumentType.string());
+            var newArg = Commands.argument("new", StringArgumentType.string());
+
+            newArg.executes(context -> {
+                if (!context.getSource().hasPermission(2)) {
+                    context.getSource().sendFailure(Component.literal("You do not have permission to rename alliances."));
+                    return 0;
+                }
+
+                String oldName = StringArgumentType.getString(context, "old");
+                String newName = StringArgumentType.getString(context, "new");
+
+                Map.Entry<UUID, Alliance> entry = findAllianceByName(oldName);
+                if (entry == null) {
+                    context.getSource().sendFailure(Component.literal("Alliance '" + oldName + "' not found."));
+                    return 0;
+                }
+
+                // Check name collision
+                for (Alliance alliance : AllianceRegistry.getAllAlliances().values()) {
+                    if (alliance.getName().equalsIgnoreCase(newName)) {
+                        context.getSource().sendFailure(Component.literal("Another alliance with that name already exists."));
+                        return 0;
+                    }
+                }
+
+                UUID idToRename = entry.getKey();
+                Alliance target = entry.getValue();
+                target.setName(newName);
+
+                try {
+                    AllianceDAO.saveAlliance(idToRename, target);
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+
+                context.getSource().sendSuccess(() ->
+                        Component.literal("Alliance '" + oldName + "' has been renamed to '" + newName + "'."), false);
+                return 1;
+            });
+
+            oldArg.then(newArg);
+            rename.then(oldArg);
+            root.then(rename);
+
+            dispatcher.register(root);
         });
     }
 }
