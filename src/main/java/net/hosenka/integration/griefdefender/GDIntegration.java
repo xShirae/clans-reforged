@@ -78,6 +78,44 @@ public final class GDIntegration {
 
         // Homes affect GD clan home info
         ClansReforgedEvents.PLAYER_HOME_SET.register((player, clanId, pos, yaw, pitch) -> {
+            // Require home to be set inside land owned by the player OR land marked as clan land
+            // where the claim owner is a member of the same clan.
+            try {
+                final var core = com.griefdefender.api.GriefDefender.getCore();
+                final var level = player.serverLevel();
+                final java.util.UUID worldId = core.getWorldUniqueId(level);
+                if (worldId != null) {
+                    final var bp = player.blockPosition();
+                    final com.griefdefender.api.claim.Claim claim = core.getClaimAt(worldId, bp.getX(), bp.getY(), bp.getZ());
+                    if (claim == null || claim.isWilderness()) {
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("You must set the clan home inside a claim you own or your clan owns."));
+                        return net.minecraft.world.InteractionResult.FAIL;
+                    }
+
+                    final java.util.UUID owner = claim.getOwnerUniqueId();
+                    if (owner != null && owner.equals(player.getUUID())) {
+                        // Personal land owned by the actor
+                        invalidateClan(clanId);
+                        return net.minecraft.world.InteractionResult.PASS;
+                    }
+
+                    final boolean isClanLand = claim.hasAttribute("gdhooks:clan");
+                    if (isClanLand && owner != null) {
+                        final java.util.UUID ownerClan = net.hosenka.clan.ClanMembershipRegistry.getClan(owner);
+                        if (ownerClan != null && ownerClan.equals(clanId)) {
+                            invalidateClan(clanId);
+                            return net.minecraft.world.InteractionResult.PASS;
+                        }
+                    }
+
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal("You can only set the clan home in land owned by you or marked as your clan land."));
+                    return net.minecraft.world.InteractionResult.FAIL;
+                }
+            } catch (Throwable t) {
+                // If anything goes wrong, fail open (don't break /clan sethome).
+                net.hosenka.util.CRDebug.log("GD home-set ownership check failed; allowing.", t);
+            }
+
             invalidateClan(clanId);
             return net.minecraft.world.InteractionResult.PASS;
         });

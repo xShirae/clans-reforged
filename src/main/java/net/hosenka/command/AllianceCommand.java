@@ -8,6 +8,7 @@ import net.hosenka.clan.Clan;
 import net.hosenka.clan.ClanMembershipRegistry;
 import net.hosenka.clan.ClanRegistry;
 import net.hosenka.database.AllianceDAO;
+import net.hosenka.integration.griefdefender.GDIntegration;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 
@@ -16,6 +17,20 @@ import java.util.Map;
 import java.util.UUID;
 
 public class AllianceCommand {
+
+    /**
+     * Invalidates GD clan provider caches for clans whose ally list may have changed.
+     * Safe to call even if GriefDefender isn't installed/initialized.
+     */
+    private static void gdInvalidateAllies(UUID... clanIds) {
+        if (clanIds == null) return;
+        for (UUID id : clanIds) {
+            if (id != null) {
+                GDIntegration.invalidateClan(id);
+            }
+        }
+    }
+
     public static void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             dispatcher.register(Commands.literal("alliance")
@@ -75,7 +90,10 @@ public class AllianceCommand {
                                             if (clan != null) {
                                                 clan.setAllianceId(null);
                                             }
+
                                         }
+
+                                        gdInvalidateAllies(deleted.getClans().toArray(new UUID[0]));
 
                                         try {
                                             AllianceDAO.deleteAlliance(toDelete);
@@ -131,6 +149,7 @@ public class AllianceCommand {
 
                                         target.addClan(clanId);
                                         clan.setAllianceId(allianceId);
+                                        gdInvalidateAllies(target.getClans().toArray(new UUID[0]));
 
                                         try {
                                             AllianceDAO.saveAlliance(allianceId, target);
@@ -170,6 +189,8 @@ public class AllianceCommand {
                                 }
 
                                 clan.setAllianceId(null);
+                                if (alliance != null) gdInvalidateAllies(alliance.getClans().toArray(new UUID[0]));
+                                gdInvalidateAllies(clanId);
 
                                 context.getSource().sendSuccess(() ->  Component.literal("Your clan has left its alliance."), false);
                                 return 1;
@@ -285,7 +306,7 @@ public class AllianceCommand {
                                                 }
 
                                                 context.getSource().sendSuccess(() ->
-                                                         Component.literal("Alliance '" + oldName + "' has been renamed to '" + newName + "'."), false);
+                                                        Component.literal("Alliance '" + oldName + "' has been renamed to '" + newName + "'."), false);
                                                 return 1;
                                             }))))
             );
