@@ -154,8 +154,44 @@ public class GDClanImpl implements Clan {
 
     @Override
     public List<Clan> getRivals() {
-        return Collections.emptyList();
+        UUID myAllianceId = source.getAllianceId();
+        if (myAllianceId == null) {
+            return Collections.emptyList();
+        }
+
+        Alliance myAlliance = AllianceRegistry.getAlliance(myAllianceId);
+        if (myAlliance == null) {
+            return Collections.emptyList();
+        }
+
+        var provider = com.griefdefender.api.GriefDefender.getCore().getClanProvider();
+        ClansReforgedClanProvider cr = (provider instanceof ClansReforgedClanProvider p) ? p : null;
+
+        List<Clan> result = new ArrayList<>();
+
+        // Every clan in every enemy alliance is a "rival clan"
+        for (UUID enemyAllianceId : myAlliance.getEnemies()) {
+            Alliance enemyAlliance = AllianceRegistry.getAlliance(enemyAllianceId);
+            if (enemyAlliance == null) continue;
+
+            for (UUID enemyClanId : enemyAlliance.getClans()) {
+                Clan wrapped;
+                if (cr != null) {
+                    wrapped = cr.getClanById(enemyClanId);
+                } else {
+                    var enemy = ClanRegistry.getClan(enemyClanId);
+                    wrapped = (enemy != null) ? new GDClanImpl(enemy) : null;
+                }
+
+                if (wrapped != null) {
+                    result.add(wrapped);
+                }
+            }
+        }
+
+        return result;
     }
+
 
     @Override
     public List<ClanPlayer> getMembers(boolean onlineOnly) {
